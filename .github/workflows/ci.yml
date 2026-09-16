@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: remoteradar
+          POSTGRES_PASSWORD: remoteradar
+          POSTGRES_DB: remoteradar_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U remoteradar"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      SECRET_KEY: ci-secret-key
+      DATABASE_URL: postgresql+asyncpg://remoteradar:remoteradar@localhost:5432/remoteradar_test
+      DATABASE_URL_SYNC: postgresql+psycopg2://remoteradar:remoteradar@localhost:5432/remoteradar_test
+      REDIS_URL: redis://localhost:6379/0
+      APP_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Installer les dependances
+        working-directory: backend
+        run: pip install .[dev]
+
+      - name: Lint (ruff)
+        working-directory: backend
+        run: ruff check app tests
+
+      - name: Migrations Alembic
+        working-directory: backend
+        run: alembic upgrade head
+
+      - name: Tests (pytest + coverage)
+        working-directory: backend
+        run: pytest --cov=app --cov-report=term-missing
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package.json
+
+      - name: Installer les dependances
+        working-directory: frontend
+        run: npm install
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build

@@ -1,0 +1,47 @@
+{
+  "job-count": 3,
+  "jobs": [
+    {
+      "id": 1234567,
+      "url": "https://remotive.com/remote-jobs/software-dev/senior-backend-engineer-1234567",
+      "title": "Senior Backend Engineer",
+      "company_name": "Acme Corp",
+      "company_logo": "https://remotive.com/logo.png",
+      "category": "Software Development",
+      "tags": ["python", "fastapi", "postgresql"],
+      "job_type": "full_time",
+      "publication_date": "2026-09-01T10:00:00",
+      "candidate_required_location": "Worldwide",
+      "salary": "$90,000 - $120,000",
+      "description": "<p>We are looking for a Senior Backend Engineer with FastAPI experience.</p>"
+    },
+    {
+      "id": 1234568,
+      "url": "https://remotive.com/remote-jobs/design/product-designer-1234568",
+      "title": "Product Designer",
+      "company_name": "Beta Studio",
+      "company_logo": "https://remotive.com/logo2.png",
+      "category": "Design",
+      "tags": ["figma", "ui", "ux"],
+      "job_type": "contract",
+      "publication_date": "2026-08-15T09:30:00",
+      "candidate_required_location": "Europe",
+      "salary": "",
+      "description": "<p>Join our design team as a freelance Product Designer.</p>"
+    },
+    {
+      "id": 1234569,
+      "url": "https://remotive.com/remote-jobs/software-dev/freelance-fullstack-1234569",
+      "title": "Freelance Fullstack Developer",
+      "company_name": "Gamma Ltd",
+      "company_logo": "https://remotive.com/logo3.png",
+      "category": "Software Development",
+      "tags": ["react", "node", "typescript"],
+      "job_type": "contract",
+      "publication_date": "2026-09-10T08:00:00",
+      "candidate_required_location": "USA only",
+      "salary": "$500-$600/day",
+      "description": "<p>We need a freelance fullstack developer for a 3 month mission.</p>"
+    }
+  ]
+}

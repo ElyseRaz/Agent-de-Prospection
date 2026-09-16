@@ -1,0 +1,188 @@
+# RemoteRadar
+
+Agent IA qui agrège, normalise, enrichit et score des offres de mission freelance en
+remote, avec suivi de candidatures.
+
+## Etat du projet
+
+**Phase 1 — Socle** : API FastAPI, authentification JWT (access/refresh + 2FA TOTP
+optionnelle), base PostgreSQL 16 (pgvector/pg_trgm/unaccent), Celery/Redis (worker +
+beat déclarés, sans tâche métier), frontend Vite/React squelette, reverse-proxy Nginx,
+CI GitHub Actions.
+
+**Phase 2 — Collecte** : interface `SourceConnector` (registre chargé dynamiquement
+depuis `app/collectors/`, aucune modification du noyau pour ajouter une source),
+connecteur Remotive (API JSON publique), client HTTP avec backoff exponentiel +
+respect de `Retry-After` + circuit breaker par domaine (Redis), vérificateur
+`robots.txt`, service de collecte idempotent (`raw_documents`, clé naturelle
+`source_id + external_id`), endpoints `GET /sources`, `GET /sources/{slug}`,
+`POST /sources/{slug}/collect` (dry-run ou réel, admin uniquement), tâche Celery
+`collection.collect_source`.
+
+**Phase 3 — Normalisation LLM** : pipeline `raw_document -> Job canonique` (nettoyage
+HTML via `selectolax`, détection de langue via `langdetect`, extraction structurée par
+LLM — Claude Sonnet 5 par défaut, configurable via `LLM_MODEL` — avec sortie validée par
+schéma Pydantic et retry automatique), cache des extractions par `content_hash +
+prompt_version` (`llm_extraction_cache`), journal d'audit coût/tokens (`llm_calls`),
+normalisation des devises vers l'EUR (API Frankfurter, taux du jour, repli statique),
+résolution entreprise minimale, normalisation des compétences vers un référentiel
+« maison » (`skills`/`job_skills`), score de qualité déterministe, endpoints admin
+`POST /normalization/run` et `POST /raw-documents/{id}/reprocess`, tâche Celery
+`normalization.normalize_pending`. Prompt versionné dans
+`backend/app/prompts/extract_job_v1.md`.
+
+Les phases suivantes (embeddings/déduplication, enrichissement entreprise/Trustpilot,
+matching, frontend complet, alertes, admin) ne sont pas encore implémentées — voir la
+section Roadmap.
+
+## Démarrage en une commande
+
+Prérequis : Docker + Docker Compose.
+
+```bash
+make up
+```
+
+Cette commande :
+1. crée `.env` à partir de `.env.example` s'il n'existe pas encore ;
+2. build et démarre tous les services (`db`, `redis`, `api`, `worker`, `beat`,
+   `frontend`, `nginx`).
+
+Puis, avant la première utilisation, applique les migrations :
+
+```bash
+make migrate
+```
+
+### Vérifier que tout fonctionne
+
+- API : http://localhost:8000/health → `{"status": "ok", "db": "ok"}`
+- Documentation OpenAPI : http://localhost:8000/docs
+- Frontend : http://localhost:5173 (affiche le statut de connexion à l'API)
+- Via le reverse-proxy Nginx : http://localhost/ (frontend), http://localhost/docs
+  (API docs), http://localhost/health
+
+### Commandes utiles (Makefile)
+
+| Commande | Effet |
+|---|---|
+| `make up` | build + démarre tous les services |
+| `make down` | arrête les services |
+| `make migrate` | applique les migrations Alembic |
+| `make makemigration m="message"` | génère une migration autogenerate |
+| `make test` | lance la suite pytest avec couverture dans le conteneur `api` |
+| `make lint` | lance ruff dans le conteneur `api` |
+| `make logs` | suit les logs de tous les services |
+| `make shell-api` | shell dans le conteneur API |
+| `make shell-db` | psql dans le conteneur Postgres |
+| `make clean` | arrête les services et supprime les volumes (⚠️ supprime les données) |
+
+## Configuration
+
+Toutes les variables sont documentées dans [.env.example](.env.example). Aucun secret
+n'est en dur dans le code : tout passe par variables d'environnement (voir
+`backend/app/core/config.py`).
+
+## Tests
+
+```bash
+make up
+make migrate
+make test
+```
+
+Les tests d'authentification (`backend/tests/test_auth.py`) couvrent : inscription,
+doublon d'email, login (succès/échec), `/auth/me`, refresh token, activation et
+vérification 2FA TOTP, et RBAC (route admin refusée à un utilisateur simple, autorisée
+à un admin).
+
+Les tests de collecte couvrent :
+- `test_collectors_remotive.py` — parsing des offres, filtre `since`, filtres de config ;
+- `test_collectors_http.py` — retry/backoff, respect de `Retry-After`, ouverture et
+  réinitialisation du circuit breaker ;
+- `test_collectors_robots.py` — respect de `robots.txt`, repli permissif si inaccessible ;
+- `test_collection_service.py` — insertion, **idempotence sur rejeu** (aucun doublon),
+  mise à jour d'un contenu modifié, dry-run sans écriture en base ;
+- `test_sources_api.py` — RBAC sur `/sources/*`, dry-run vs collecte réelle via l'API.
+
+Toutes les réponses HTTP externes sont mockées via `httpx.MockTransport` à partir d'une
+fixture figée (`backend/tests/fixtures/remotive_response.json`) : aucun test n'effectue
+d'appel réseau réel.
+
+Les tests de normalisation couvrent :
+- `test_normalization_html_clean.py`, `test_normalization_language.py` — nettoyage HTML,
+  détection de langue ;
+- `test_llm_extraction.py` — **cache par content_hash** (un 2e appel ne recontacte jamais
+  le LLM), retry automatique sur sortie invalide, échec après épuisement des tentatives ;
+- `test_normalization_company.py`, `test_normalization_skills.py` — résolution
+  entreprise, normalisation et déduplication des compétences ;
+- `test_currency.py` — conversion EUR via Frankfurter (mocké), repli statique si
+  injoignable ;
+- `test_normalization_service.py` — pipeline complet `raw_document -> Job`, idempotence,
+  `force=True` pour rejouer, échec marquant le document `FAILED` ;
+- `test_normalization_api.py` — RBAC sur `/normalization/run` et `/raw-documents/{id}/reprocess`.
+
+L'extraction LLM est testée via un backend injectable (`JobExtractionBackend` Protocol) :
+aucun test n'appelle l'API Anthropic réelle, aucune clé API n'est nécessaire pour lancer
+la suite.
+
+## Architecture (cible, voir Roadmap pour l'état d'implémentation)
+
+Architecture hexagonale en 4 couches :
+
+1. **Collecte** — connecteurs de sources (`SourceConnector.fetch() -> Iterable[RawDocument]`),
+   chargés dynamiquement depuis un registre en base.
+2. **Normalisation** — nettoyage HTML, détection de langue, extraction structurée par
+   LLM validée par schéma Pydantic.
+3. **Enrichissement & scoring** — déduplication, réputation entreprise, détection
+   d'arnaque, score de compatibilité au profil utilisateur.
+4. **Exposition** — API REST (OpenAPI) + SSE, consommée par le frontend React.
+
+## Arborescence
+
+```
+/backend    API FastAPI, modèles SQLAlchemy, migrations Alembic, worker Celery, tests
+/frontend   React 18 + TypeScript + Vite
+/infra      Nginx, scripts d'initialisation Postgres
+/docs       Documentation complémentaire (ajoutée au fil des phases)
+```
+
+## Roadmap
+
+| Phase | Contenu | Statut |
+|---|---|---|
+| 1 | Socle : Docker Compose, FastAPI, Alembic, modèles, auth JWT | ✅ |
+| 2 | `SourceConnector` + connecteur Remotive + `raw_documents` | ✅ |
+| 3 | Pipeline de normalisation LLM + validation Pydantic + cache | ✅ |
+| 4 | Embeddings, déduplication, recherche hybride | ⏳ |
+| 5 | Enrichissement entreprise + Trustpilot + score de risque | ⏳ |
+| 6 | Profils, moteur de matching, explication du score | ⏳ |
+| 7 | Frontend React complet (dashboard, liste, fiche, kanban, analytics) | ⏳ |
+| 8 | Alertes, notifications, admin, observabilité, CI, durcissement | ⏳ |
+
+## IA & coûts
+
+- Modèle par défaut : `claude-sonnet-5` (configurable via `LLM_MODEL`), choisi pour
+  l'extraction structurée à fort volume (tâche fermée, pas de raisonnement complexe).
+- Sortie contrainte par schéma Pydantic (Structured Outputs de l'API Claude), avec
+  retry automatique (3 tentatives) en cas de sortie invalide.
+- Cache par `content_hash + prompt_version + purpose` (`llm_extraction_cache`) : une
+  même extraction n'est jamais payée deux fois, y compris en cas de repost identique
+  sur une autre offre.
+- Chaque appel (hit de cache inclus) est journalisé dans `llm_calls` avec le nombre de
+  tokens et le coût réel en dollars.
+- Prompts versionnés dans `backend/app/prompts/` — chaque `Job` conserve la version qui
+  l'a produit, pour permettre de rejouer l'extraction sans re-crawler.
+
+## Sécurité et conformité
+
+- Mots de passe hachés avec Argon2 (`argon2-cffi`).
+- JWT access (courte durée) + refresh (longue durée), 2FA TOTP optionnelle.
+- RBAC par dépendance FastAPI (`require_role`).
+- Aucun identifiant en dur : tout passe par variables d'environnement.
+- Chaque connecteur respecte `robots.txt` (quand applicable) et les en-têtes
+  `Retry-After`, et porte un champ `compliance_note` documentant sa légalité
+  (visible via `GET /api/v1/sources`).
+- Circuit breaker par domaine (Redis) après échecs consécutifs, backoff exponentiel.
+- Idempotence garantie par clé naturelle `source_id + external_id` sur `raw_documents` :
+  rejouer une collecte ne crée jamais de doublon.
