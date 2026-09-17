@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, get_settings, get_user_by_email, require_role
 from app.core.config import Settings
+from app.core.rate_limit import rate_limit
 from app.core.security import (
     InvalidTokenError,
     TokenType,
@@ -34,7 +35,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 log = structlog.get_logger(__name__)
 
 
-@router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=UserRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit("register", max_requests=5, window_seconds=3600))],
+)
 async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> User:
     existing = await get_user_by_email(db, payload.email)
     if existing is not None:
@@ -54,7 +60,11 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)) -> U
     return user
 
 
-@router.post("/login", response_model=TokenPair)
+@router.post(
+    "/login",
+    response_model=TokenPair,
+    dependencies=[Depends(rate_limit("login", max_requests=10, window_seconds=300))],
+)
 async def login(
     payload: LoginRequest,
     db: AsyncSession = Depends(get_db),

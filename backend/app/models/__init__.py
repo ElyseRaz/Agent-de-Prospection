@@ -1,4 +1,16 @@
 from app.core.db import Base
+from app.models.alert import (
+    AlertFrequency,
+    AlertNotification,
+    NotificationChannelKind,
+    SavedSearch,
+)
+from app.models.application import (
+    Application,
+    ApplicationEvent,
+    ApplicationEventType,
+    ApplicationStage,
+)
 from app.models.blacklist import Blacklist, BlacklistEntityType
 from app.models.company import Company
 from app.models.dedup import JobDuplicateLink
@@ -58,4 +70,12 @@ __all__ = [
     "Match",
     "MatchFeedback",
     "MatchFeedbackAction",
+    "Application",
+    "ApplicationEvent",
+    "ApplicationStage",
+    "ApplicationEventType",
+    "SavedSearch",
+    "AlertNotification",
+    "AlertFrequency",
+    "NotificationChannelKind",
 ]

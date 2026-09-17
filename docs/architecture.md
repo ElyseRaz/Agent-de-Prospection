@@ -12,11 +12,14 @@ source de données ou un canal de notification ne demande jamais de modifier le 
 └─────────────┘   └────────────────┘   └───────────────────────┘   └──────────────┘
 ```
 
-Les sous-sections ci-dessous détaillent ces 4 couches (1 à 3, puis 6 pour l'exposition) ;
-2 sujets transverses y sont documentés à part faute de mieux s'insérer dans le schéma
-d'origine : le choix du fournisseur LLM (section 4, détail technique traversant les
-couches Normalisation et Enrichissement) et les profils/matching (section 5, une
-extension du modèle à 4 couches plutôt qu'une 5e couche à proprement parler).
+Les sous-sections ci-dessous détaillent ces 4 couches (1 à 3, puis 6 pour l'exposition,
+qui inclut désormais le pipeline de candidatures) ; 4 sujets transverses y sont
+documentés à part faute de mieux s'insérer dans le schéma d'origine : le choix du
+fournisseur LLM (section 4, détail technique traversant les couches Normalisation et
+Enrichissement), les profils/matching (section 5, une extension du modèle à 4 couches
+plutôt qu'une 5e couche à proprement parler), le frontend (section 7, consommateur de
+la couche Exposition) et les alertes/admin/observabilité/durcissement (section 8, ajoutés
+en phase 8 par-dessus les couches existantes plutôt qu'une 5e couche).
 
 ### 1. Collecte
 
@@ -199,7 +202,105 @@ future, pas des signaux fabriqués.
 ### 6. Exposition
 
 API REST documentée en OpenAPI (FastAPI génère `/docs` et `/openapi.json`
-automatiquement) + flux SSE pour le temps réel, consommés par le frontend React.
+automatiquement) + flux SSE (`GET /notifications/stream`, phase 8) pour le temps réel,
+consommés par le frontend React.
+
+**Pipeline de candidatures** (`app/models/application.py`, `app/services/applications.py`,
+`app/api/routes/applications.py`) : une ligne `Application` par couple `(profile_id,
+job_id)` (contrainte unique `uq_applications_profile_job`, création idempotente via
+`ON CONFLICT DO NOTHING`), avec 7 étapes (`spotted -> to_apply -> applied -> in_discussion
+-> proposal -> won/lost`). Chaque changement d'étape ou de note génère un
+`ApplicationEvent` horodaté (`payload` JSONB), formant un historique consultable sans
+table de log séparée. `applied_at`/`last_contact_at` sont dérivés automatiquement du
+changement d'étape plutôt que saisis manuellement, pour éviter l'incohérence entre le
+statut affiché et ces dates. Propriété stricte par profil (403 si le profil demandé
+n'appartient pas à l'utilisateur courant, vérifié à chaque route via
+`_get_owned_profile`/`_get_owned_application`).
+
+### 7. Frontend
+
+React 18 + TypeScript (strict) + Vite. **MUI (Material-UI)** pour l'ensemble des
+composants visuels — remplace Tailwind/shadcn-ui prévu dans le cahier des charges
+d'origine, à la demande explicite en cours de phase 7. TanStack Table reste utilisé en
+sous-couche pour la logique de tableau (colonnes, tri) et la virtualisation
+(`@tanstack/react-virtual`), rendu via des composants MUI plutôt que du HTML brut.
+
+- **Etat serveur** : TanStack Query exclusivement (`src/hooks/`) — aucun composant
+  n'appelle `fetch`/`apiFetch` directement, ce qui centralise le cache, l'invalidation et
+  les états loading/error.
+- **Etat client** : Zustand (`src/store/authStore.ts`, avec `persist`) pour les tokens
+  d'authentification et le profil actif sélectionné — seul état qui doit survivre à un
+  rechargement de page sans dépendre du serveur.
+- **Client API** (`src/api/client.ts`) : wrapper `apiFetch<T>()` unique, injection du
+  Bearer token, **un seul retry automatique sur 401** via le refresh token (garde
+  `refreshPromise` contre les rafraîchissements concurrents), erreurs typées (`ApiError`).
+- **Rendu conditionnel** systématique : chaque écran gère explicitement les états
+  chargement / vide / erreur (`components/common/{Loading,Empty,Error}State.tsx`) plutôt
+  que de supposer les données toujours présentes.
+- **Kanban** : transition d'étape par menu contextuel (pas de glisser-déposer, hors scope
+  phase 7) — `components/kanban/`.
+- **Décimaux** : Pydantic v2 sérialise les champs `Decimal` (TJM, `expected_value`, etc.)
+  en `string` JSON, jamais en `number` — reflété dans `src/api/types.ts`
+  (`string | null`), pour ne pas perdre de précision ni introduire d'arrondi flottant côté
+  client.
+
+### 8. Alertes, admin, observabilité, durcissement
+
+**Recherches sauvegardées** (`app/models/alert.py`, `app/services/alerts.py`) : une
+`SavedSearch` stocke les mêmes filtres que `GET /jobs/search` (JSONB, reconstruits en
+`JobSearchFilters` à chaque évaluation via `_filters_from_json` — même dataclass que la
+recherche interactive, aucune logique de filtrage dupliquée) plus une liste de canaux et
+une fréquence (`instant`/`daily`). `evaluate_saved_search` réutilise `hybrid_search_jobs`
+(phase 4) trié par fraîcheur, ne retient que les offres détectées depuis le dernier
+passage, et n'envoie jamais deux fois la même offre pour la même recherche (contrainte
+unique `uq_alert_notifications_search_job`, vérifiée avant l'envoi). Une panne d'un canal
+(`NotificationError`) n'empêche ni les autres canaux ni les autres offres d'être traités —
+capturée et journalisée, jamais propagée. `evaluate_due_saved_searches` (tâche Celery Beat
+`alerts.evaluate_due_saved_searches`, toutes les 15 min) n'évalue que les recherches dues :
+`instant` l'est à chaque passage, `daily` seulement après 24h depuis `last_run_at`.
+
+**Canaux de notification** (`app/notifications/`) : interface `NotificationChannel`
+commune (email SMTP via `smtplib` déporté dans un thread, Slack/Discord en webhook HTTP,
+Telegram via l'API bot `sendMessage`), chacun construit seulement si ses variables
+d'environnement sont présentes (`build_notification_channels`, même principe que
+Trustpilot phase 5 : fonctionnalité optionnelle, jamais d'erreur au démarrage). Un canal,
+un bot ou un webhook sont configurés **une fois pour toute l'instance**, pas par
+utilisateur — cohérent avec les variables d'environnement déjà réservées en phase 1
+(`SLACK_WEBHOOK_URL`, `TELEGRAM_BOT_TOKEN`, etc., toutes à valeur unique).
+
+**Flux temps réel** (`GET /notifications/stream`) : plutôt que d'introduire un bus
+d'événements (Redis Pub/Sub) pour un unique flux, l'endpoint interroge périodiquement
+`alert_notifications` (qui sert déjà d'idempotence) et ne renvoie que les lignes pas
+encore vues par cette connexion. La génératrice (`_stream_notifications`) est testée
+directement, sans passer par `StreamingResponse` ni un serveur réel, via un paramètre
+`max_polls` qui la rend déterministe en test. L'API `EventSource` du navigateur ne
+permettant pas d'en-têtes personnalisés, le token peut être passé en paramètre de requête
+(`?access_token=...`, `get_current_user_sse`) — exception documentée à la règle « JWT
+toujours en en-tête Bearer » appliquée partout ailleurs.
+
+**Admin** (`app/services/admin.py`, `app/api/routes/admin.py`) : agrégation de `llm_calls`
+par jour/purpose/modèle (consommation déjà journalisée depuis la phase 3, aucune nouvelle
+collecte de données), gestion des utilisateurs (rôle, activation), compteurs globaux.
+Garde-fou : un administrateur ne peut ni se retirer ses propres droits admin ni se
+désactiver lui-même via cette API (éviterait un lockout total du système).
+
+**Rate limiting** (`app/core/rate_limit.py`) : `RateLimiter` à fenêtre fixe, construit sur
+le même `CounterStore` Protocol que le circuit breaker des collecteurs (phase 2) —
+`incr`/`expire` sur une clé Redis, aucune dépendance nouvelle. Appliqué par IP cliente sur
+`/auth/login` et `/auth/register` via une factory de dépendance FastAPI
+(`rate_limit(prefix, max_requests, window_seconds)`), `429` au-delà. Comme pour le
+circuit breaker, le store est injectable (`get_rate_limit_store`), ce qui permet aux
+tests d'utiliser un `InMemoryCounterStore` sans Redis réel.
+
+**Observabilité** : middleware d'ID de requête (`RequestIDMiddleware`) qui génère ou
+reprend `X-Request-ID`, le lie aux logs `structlog` le temps de la requête (contextvars)
+et le renvoie en en-tête — permet de corréler un rapport utilisateur aux logs serveur.
+Sentry (`sentry-sdk`) initialisé seulement si `SENTRY_DSN` est présent.
+
+**Durcissement** : `SecurityHeadersMiddleware` ajoute `X-Content-Type-Options`,
+`X-Frame-Options` et `Referrer-Policy` à chaque réponse. Pas de CSP complète : cette API
+ne sert aucun contenu HTML consommé par un navigateur en dehors du frontend React
+(origine distincte, déjà couverte par CORS).
 
 ## Choix techniques notables (Phase 1)
 

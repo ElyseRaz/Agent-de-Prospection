@@ -73,8 +73,39 @@ chaque côté). Endpoints CRUD `/profiles`, `PUT /profiles/{id}/skills`,
 tierce compatible OpenAI (`LLM_PROVIDER=openai_compatible`, appelée en HTTP direct — voir
 § IA & coûts). Anthropic reste le défaut, rien ne change sans action explicite.
 
-Les phases suivantes (frontend complet, alertes, admin) ne sont pas encore implémentées —
-voir la section Roadmap.
+**Phase 7 — Frontend complet & pipeline de candidatures (Kanban)** : côté backend, suivi
+de candidatures type CRM (`applications`/`application_events`, étapes `spotted -> to_apply
+-> applied -> in_discussion -> proposal -> won/lost`, historique d'événements horodaté),
+endpoints CRUD `/profiles/{id}/applications` avec propriété stricte (403 si le profil
+n'appartient pas à l'utilisateur), création idempotente (contrainte unique
+`profile_id + job_id`). Côté frontend, application React complète : authentification
+(login/register, refresh automatique sur 401), sélecteur de profil actif persistant
+(Zustand), recherche d'offres (filtres TJM/séniorité/remote/contrat, tri, vue tableau
+virtualisée `@tanstack/react-virtual` pour 10k+ lignes et vue cartes), fiche offre
+détaillée (risque, ajout au pipeline, feedback de matching), pipeline Kanban (transition
+d'étape par menu, pas de glisser-déposer), tableau de bord (statistiques + graphiques
+Recharts), gestion de profils et compétences. **Design UI/UX en MUI (Material-UI)**, à la
+demande explicite — remplace Tailwind/shadcn-ui prévu initialement dans le cahier des
+charges.
+
+**Phase 8 — Alertes, admin, observabilité, CI, durcissement** : recherches sauvegardées
+(`saved_searches`, mêmes filtres que `GET /jobs/search`, fréquence `instant`/`daily`) avec
+notifications multi-canal (email SMTP, Slack, Telegram, Discord — chaque canal optionnel
+indépendamment, voir `app/notifications/`), idempotence par offre déjà notifiée
+(`alert_notifications`), évaluation périodique via Celery Beat (`alerts.evaluate_due_saved_searches`,
+toutes les 15 min) et endpoint `POST /saved-searches/{id}/run` pour un déclenchement manuel ;
+flux temps réel `GET /notifications/stream` (SSE, basé sur un polling de la table
+d'idempotence plutôt qu'un bus dédié). Écran admin (API) : `GET /admin/llm-usage`
+(consommation LLM agrégée par jour/purpose/modèle), `GET/PATCH /admin/users`
+(rôle, activation), `GET /admin/stats`. Observabilité : intégration Sentry optionnelle
+(`SENTRY_DSN`), middleware d'ID de requête corrélé aux logs structurés. Durcissement :
+en-têtes de sécurité de base, rate limiting Redis sur `/auth/login` et `/auth/register`
+(réutilise le `CounterStore` du circuit breaker phase 2). CI GitHub Actions déjà en place
+depuis la phase 1, complétée : seuil de couverture 70 % sur normalisation/scoring, lint
+frontend en plus du build.
+
+Toutes les phases du cahier des charges initial sont maintenant implémentées — voir la
+section Roadmap pour le détail phase par phase.
 
 ## Démarrage en une commande
 
@@ -217,6 +248,44 @@ Les tests du fournisseur LLM alternatif couvrent :
   "chat completions" standard), erreurs HTTP/JSON invalide/schéma incompatible, coût à
   0$ quand aucun tarif n'est connu pour le modèle.
 
+Les tests du pipeline de candidatures couvrent :
+- `test_applications_api.py` — création + liste, **idempotence** (rejouer la création ne
+  duplique jamais), changement d'étape journalisé (`ApplicationEvent`) et positionnement
+  automatique de `applied_at`, mise à jour des notes, invisibilité d'une candidature pour
+  un autre utilisateur (403), suppression, authentification requise (401).
+
+Les tests d'alertes/admin/durcissement (phase 8) couvrent :
+- `test_alerts_service.py` — notification d'une offre nouvelle, **idempotence** (jamais
+  renotifiée), panne d'un canal sans bloquer les autres (`NotificationError` capturée),
+  canal demandé mais non configuré simplement ignoré, planification `instant` (toujours
+  due) vs `daily` (due seulement après 24h), recherches inactives ignorées ;
+- `test_saved_searches_api.py` — CRUD avec propriété, rejet d'un canal inconnu (422),
+  déclenchement manuel (`POST /saved-searches/{id}/run`) ;
+- `test_notification_channels.py` — Slack/Discord/Telegram via `httpx.MockTransport`
+  (aucun appel réseau réel), email via un double de `smtplib.SMTP` (aucun socket ouvert) ;
+- `test_notifications_stream.py` — le flux SSE (fonction génératrice testée directement,
+  sans passer par `StreamingResponse`) ne fuite jamais les notifications d'un autre
+  utilisateur, ne répète jamais un événement déjà vu entre deux passages ;
+- `test_admin_api.py` — RBAC admin sur les 3 endpoints, agrégation de `llm_calls`,
+  **un admin ne peut pas se retirer ses propres droits ni se désactiver** ;
+- `test_rate_limit.py` — `/auth/login` et `/auth/register` renvoient 429 au-delà du seuil
+  configuré, avec un `CounterStore` partagé injecté pour un test déterministe.
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run lint     # ESLint (flat config, TypeScript + react-hooks)
+npm run build    # tsc -b && vite build
+```
+
+Le client API (`src/api/client.ts`) centralise l'injection du token, le retry automatique
+sur 401 (un seul essai de refresh, garde anti-concurrence), et le typage des erreurs. Les
+hooks TanStack Query (`src/hooks/`) encapsulent tous les appels réseau ; aucun composant
+n'appelle `fetch` directement. Le tableau d'offres (`JobTable`) est virtualisé
+(`@tanstack/react-virtual`) pour rester fluide avec un grand volume de résultats.
+
 ## Architecture (cible, voir Roadmap pour l'état d'implémentation)
 
 Architecture hexagonale en 4 couches :
@@ -248,8 +317,8 @@ Architecture hexagonale en 4 couches :
 | 4 | Embeddings, déduplication, recherche hybride | ✅ |
 | 5 | Enrichissement entreprise + Trustpilot + score de risque | ✅ |
 | 6 | Profils, moteur de matching, explication du score | ✅ |
-| 7 | Frontend React complet (dashboard, liste, fiche, kanban, analytics) | ⏳ |
-| 8 | Alertes, notifications, admin, observabilité, CI, durcissement | ⏳ |
+| 7 | Frontend React complet (dashboard, liste, fiche, kanban, analytics) | ✅ |
+| 8 | Alertes, notifications, admin, observabilité, CI, durcissement | ✅ |
 
 ## IA & coûts
 
@@ -297,3 +366,13 @@ Architecture hexagonale en 4 couches :
 - Circuit breaker par domaine (Redis) après échecs consécutifs, backoff exponentiel.
 - Idempotence garantie par clé naturelle `source_id + external_id` sur `raw_documents` :
   rejouer une collecte ne crée jamais de doublon.
+- **Rate limiting** (phase 8) sur `/auth/login` (10 req / 5 min) et `/auth/register`
+  (5 req / heure), par IP cliente, `429` au-delà — réutilise le `CounterStore` du circuit
+  breaker (`app/core/rate_limit.py`), aucune dépendance nouvelle.
+- **En-têtes de sécurité** (phase 8) : `X-Content-Type-Options`, `X-Frame-Options`,
+  `Referrer-Policy` sur toutes les réponses (`app/core/middleware.py`).
+- **Observabilité** (phase 8) : ID de requête généré/repris (`X-Request-ID`) et lié aux
+  logs structurés le temps de la requête ; Sentry optionnel (`SENTRY_DSN`, non initialisé
+  si absent).
+- Un administrateur ne peut ni se retirer ses propres droits admin ni se désactiver via
+  `PATCH /admin/users/{id}` (garde-fou anti-lockout).

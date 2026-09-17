@@ -1,53 +1,69 @@
-import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { Navigate, Route, Routes } from "react-router-dom";
+import AppLayout from "./components/layout/AppLayout";
+import ProtectedRoute from "./components/layout/ProtectedRoute";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+import DashboardPage from "./pages/DashboardPage";
+import JobsSearchPage from "./pages/JobsSearchPage";
+import JobDetailPage from "./pages/JobDetailPage";
+import PipelinePage from "./pages/PipelinePage";
+import ProfilePage from "./pages/ProfilePage";
 
-type HealthStatus = {
-  status: string;
-  db: string;
-};
-
-type FetchState =
-  | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "success"; data: HealthStatus };
+function ProtectedLayout({ children }: { children: ReactNode }) {
+  return (
+    <ProtectedRoute>
+      <AppLayout>{children}</AppLayout>
+    </ProtectedRoute>
+  );
+}
 
 export default function App() {
-  const [state, setState] = useState<FetchState>({ kind: "loading" });
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    fetch("/health", { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`Statut HTTP ${response.status}`);
-        }
-        return response.json() as Promise<HealthStatus>;
-      })
-      .then((data) => setState({ kind: "success", data }))
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setState({
-          kind: "error",
-          message: error instanceof Error ? error.message : "Erreur inconnue",
-        });
-      });
-
-    return () => controller.abort();
-  }, []);
-
   return (
-    <main style={{ fontFamily: "sans-serif", padding: "2rem" }}>
-      <h1>RemoteRadar</h1>
-      <p>Phase 1 — socle backend/infra.</p>
-      {state.kind === "loading" && <p>Verification de la connexion API...</p>}
-      {state.kind === "error" && (
-        <p style={{ color: "crimson" }}>Echec de connexion a l&apos;API : {state.message}</p>
-      )}
-      {state.kind === "success" && (
-        <p style={{ color: "green" }}>
-          API en ligne — statut: {state.data.status}, base de donnees: {state.data.db}
-        </p>
-      )}
-    </main>
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route
+        path="/"
+        element={
+          <ProtectedLayout>
+            <DashboardPage />
+          </ProtectedLayout>
+        }
+      />
+      <Route
+        path="/jobs"
+        element={
+          <ProtectedLayout>
+            <JobsSearchPage />
+          </ProtectedLayout>
+        }
+      />
+      <Route
+        path="/jobs/:jobId"
+        element={
+          <ProtectedLayout>
+            <JobDetailPage />
+          </ProtectedLayout>
+        }
+      />
+      <Route
+        path="/pipeline"
+        element={
+          <ProtectedLayout>
+            <PipelinePage />
+          </ProtectedLayout>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedLayout>
+            <ProfilePage />
+          </ProtectedLayout>
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

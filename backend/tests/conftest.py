@@ -13,6 +13,8 @@ import sqlalchemy as sa  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 
+from app.api.deps import get_rate_limit_store  # noqa: E402
+from app.collectors.http import InMemoryCounterStore  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.core.db import Base, create_engine_and_session  # noqa: E402
 from app.main import create_app  # noqa: E402
@@ -54,7 +56,9 @@ async def _clean_tables(engine_and_session):
     async with session_factory() as session:
         await session.execute(
             sa.text(
-                "TRUNCATE TABLE match_feedback, matches, profile_skills, profiles, "
+                "TRUNCATE TABLE alert_notifications, saved_searches, "
+                "application_events, applications, "
+                "match_feedback, matches, profile_skills, profiles, "
                 "job_duplicate_links, job_skills, jobs, "
                 "company_reputation, companies, skills, blacklist, "
                 "llm_extraction_cache, llm_calls, "
@@ -71,6 +75,12 @@ async def app(engine_and_session):
     fastapi_app.state.settings = get_settings()
     fastapi_app.state.engine = engine
     fastapi_app.state.session_factory = session_factory
+    fastapi_app.state.notification_channels = {}
+    # Pas de redis reel en test (lifespan non declenchee par ASGITransport) :
+    # remplace par un store en memoire, comme get_circuit_breaker dans les
+    # tests de collecte. Effet : le rate limiting reste actif (pas desactive)
+    # mais sans dependance externe.
+    fastapi_app.dependency_overrides[get_rate_limit_store] = lambda: InMemoryCounterStore()
     return fastapi_app
 
 
@@ -207,6 +217,25 @@ def make_risk_assessment(**overrides):
     defaults = dict(risk_score=10, reasons=[])
     defaults.update(overrides)
     return RiskAssessment(**defaults)
+
+
+class FakeNotificationChannel:
+    """Double de test pour NotificationChannel : aucun appel reseau/SMTP.
+
+    `sent` accumule chaque envoi reussi (pour assertion) ; si `fail` est
+    vrai, `send()` leve `NotificationError` a chaque appel (simule une
+    panne du canal, sans jamais faire planter l'evaluation complete)."""
+
+    def __init__(self, *, fail: bool = False) -> None:
+        self.fail = fail
+        self.sent: list[dict] = []
+
+    async def send(self, *, to: str, subject: str, body: str) -> None:
+        from app.notifications.base import NotificationError
+
+        if self.fail:
+            raise NotificationError("panne simulee")
+        self.sent.append({"to": to, "subject": subject, "body": body})
 
 
 class FakeReputationProvider:

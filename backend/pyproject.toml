@@ -25,6 +25,7 @@ dependencies = [
     "selectolax>=0.3,<0.5",
     "pgvector>=0.3,<0.4",
     "sentence-transformers>=3.0,<4.0",
+    "sentry-sdk[fastapi]>=2.0,<3.0",
 ]
 
 [project.optional-dependencies]

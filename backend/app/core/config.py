@@ -54,6 +54,22 @@ class Settings(BaseSettings):
     # Optionnelle : sans elle, la verification Trustpilot est simplement sautee.
     trustpilot_api_key: str | None = None
 
+    # Alertes (phase 8). Chaque canal est optionnel independamment des autres
+    # (voir app/notifications/factory.py) : une recherche sauvegardee demandant
+    # un canal non configure est simplement ignoree pour ce canal, jamais en erreur.
+    smtp_host: str | None = None
+    smtp_port: int | None = None
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    slack_webhook_url: str | None = None
+    discord_webhook_url: str | None = None
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
+
+    # Observabilite (phase 8). Optionnel : sans DSN, Sentry n'est simplement
+    # pas initialise (voir app/main.py).
+    sentry_dsn: str | None = None
+
     @property
     def sync_database_url(self) -> str:
         if self.database_url_sync:

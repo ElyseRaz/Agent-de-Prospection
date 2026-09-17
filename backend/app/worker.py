@@ -16,7 +16,9 @@ from app.models.source import Source
 from app.normalization.llm_extraction import build_job_extraction_backend
 from app.normalization.raw_text.registry import discover_raw_text_extractors
 from app.normalization.risk_extraction import build_risk_assessment_backend
+from app.notifications.factory import build_notification_channels
 from app.reputation.trustpilot import TrustpilotReputationProvider
+from app.services.alerts import evaluate_due_saved_searches
 from app.services.backfill import backfill_embeddings_and_dedup
 from app.services.collection import DryRunResult, run_collection
 from app.services.expiry import mark_expired_jobs
@@ -39,7 +41,15 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
-    beat_schedule={},
+    beat_schedule={
+        # Toutes les 15 min : evalue les recherches INSTANT dues (a chaque
+        # passage) et les DAILY dues (>=24h depuis leur dernier passage) -
+        # voir app/services/alerts.py:_is_due.
+        "evaluate-saved-searches": {
+            "task": "alerts.evaluate_due_saved_searches",
+            "schedule": 900.0,
+        },
+    },
     imports=[],
 )
 
@@ -96,6 +106,14 @@ def refresh_profile_matches_task(limit_per_profile: int = 20) -> dict:
     Utile pour tenir `matches` a jour independamment d'un appel API (ex: futur
     digest quotidien, phase 8)."""
     return asyncio.run(_refresh_profile_matches_async(limit_per_profile))
+
+
+@celery_app.task(name="alerts.evaluate_due_saved_searches")
+def evaluate_due_saved_searches_task() -> dict:
+    """Tache periodique (Celery Beat, toutes les 15 min) : evalue toutes les
+    recherches sauvegardees dues et envoie les notifications. Aucun cout LLM
+    (reutilise la recherche hybride existante, embeddings locaux)."""
+    return asyncio.run(_evaluate_due_saved_searches_async())
 
 
 async def _collect_source_async(source_slug: str, dry_run: bool) -> dict:
@@ -225,3 +243,21 @@ async def _refresh_profile_matches_async(limit_per_profile: int) -> dict:
         return {"profiles_refreshed": refreshed}
     finally:
         await engine.dispose()
+
+
+async def _evaluate_due_saved_searches_async() -> dict:
+    engine, session_factory = create_engine_and_session(settings)
+
+    async with httpx.AsyncClient(timeout=20.0) as http_client:
+        channels = build_notification_channels(settings, http_client=http_client)
+        try:
+            async with session_factory() as db:
+                summary = await evaluate_due_saved_searches(
+                    db, embedding_backend=_embedding_backend, channels=channels
+                )
+            return {
+                "evaluated": summary.evaluated,
+                "notifications_sent": summary.notifications_sent,
+            }
+        finally:
+            await engine.dispose()
