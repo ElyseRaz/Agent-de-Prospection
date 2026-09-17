@@ -31,9 +31,18 @@ résolution entreprise minimale, normalisation des compétences vers un référe
 `normalization.normalize_pending`. Prompt versionné dans
 `backend/app/prompts/extract_job_v1.md`.
 
-Les phases suivantes (embeddings/déduplication, enrichissement entreprise/Trustpilot,
-matching, frontend complet, alertes, admin) ne sont pas encore implémentées — voir la
-section Roadmap.
+**Phase 4 — Embeddings, déduplication, recherche hybride** : embeddings locaux
+(`sentence-transformers`, modèle `paraphrase-multilingual-mpnet-base-v2`, 768 dim,
+aucune clé API, poids pré-téléchargés au build Docker), recherche plein texte
+(`search_tsv`, config `simple` + `unaccent`, GIN) et recherche hybride (fusion
+texte + cosinus pgvector/HNSW, `GET /jobs/search` avec filtres TJM/stack/séniorité/etc.
+et tri), déduplication multi-niveaux (hash exact → trigramme pg_trgm → cosinus,
+fusion via `canonical_id` + `job_duplicate_links`), détection d'expiration basique
+(`last_seen_at`), endpoints `POST /jobs/backfill-embeddings` (ré-embedde sans
+réappeler le LLM) et `POST /jobs/mark-expired`.
+
+Les phases suivantes (enrichissement entreprise/Trustpilot, matching, frontend complet,
+alertes, admin) ne sont pas encore implémentées — voir la section Roadmap.
 
 ## Démarrage en une commande
 
@@ -126,6 +135,23 @@ L'extraction LLM est testée via un backend injectable (`JobExtractionBackend` P
 aucun test n'appelle l'API Anthropic réelle, aucune clé API n'est nécessaire pour lancer
 la suite.
 
+Les tests d'embeddings/déduplication/recherche couvrent :
+- `test_embeddings_text_builder.py` — construction du texte source de l'embedding ;
+- `test_deduplication.py` — les **3 niveaux** (hash exact, trigramme avec contrainte
+  même entreprise, cosinus au-dessus du seuil), non-détection de jobs réellement
+  différents, upsert idempotent de `job_duplicate_links` ;
+- `test_expiry.py` — passage `EXPIRED` des jobs non reconfirmés, jobs déjà expirés
+  ignorés ;
+- `test_search_service.py` — recherche sans requête (filtres + tri), plein texte,
+  vectoriel seul, exclusion des doublons/jobs non actifs, filtre TJM ;
+- `test_jobs_api.py` — authentification requise sur `/jobs/search`, RBAC sur
+  `/jobs/backfill-embeddings` et `/jobs/mark-expired`, URLs des doublons sur
+  `GET /jobs/{id}`.
+
+Comme pour le LLM, l'embedding est testé via un backend injectable
+(`EmbeddingBackend` Protocol, `FakeEmbeddingBackend` dans `conftest.py`) : aucun test
+ne charge le modèle `sentence-transformers` réel.
+
 ## Architecture (cible, voir Roadmap pour l'état d'implémentation)
 
 Architecture hexagonale en 4 couches :
@@ -154,7 +180,7 @@ Architecture hexagonale en 4 couches :
 | 1 | Socle : Docker Compose, FastAPI, Alembic, modèles, auth JWT | ✅ |
 | 2 | `SourceConnector` + connecteur Remotive + `raw_documents` | ✅ |
 | 3 | Pipeline de normalisation LLM + validation Pydantic + cache | ✅ |
-| 4 | Embeddings, déduplication, recherche hybride | ⏳ |
+| 4 | Embeddings, déduplication, recherche hybride | ✅ |
 | 5 | Enrichissement entreprise + Trustpilot + score de risque | ⏳ |
 | 6 | Profils, moteur de matching, explication du score | ⏳ |
 | 7 | Frontend React complet (dashboard, liste, fiche, kanban, analytics) | ⏳ |
@@ -173,6 +199,10 @@ Architecture hexagonale en 4 couches :
   tokens et le coût réel en dollars.
 - Prompts versionnés dans `backend/app/prompts/` — chaque `Job` conserve la version qui
   l'a produit, pour permettre de rejouer l'extraction sans re-crawler.
+- Embeddings : modèle local `sentence-transformers` (`paraphrase-multilingual-mpnet-base-v2`,
+  768 dimensions), pré-téléchargé au build de l'image Docker (`backend/Dockerfile`) —
+  aucune clé API, aucun coût récurrent, aucun appel réseau à l'exécution. Contrepartie
+  assumée : image `api`/`worker` plus lourde (~1-2 Go de plus) et build plus long.
 
 ## Sécurité et conformité
 

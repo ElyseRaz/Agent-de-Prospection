@@ -86,12 +86,31 @@ référentiel « maison » par slug + table d'alias (`app/normalization/skills.p
 intégration ESCO complète est hors scope) ; score de qualité déterministe 0-100 basé sur
 la complétude des champs extraits (`app/normalization/quality.py`).
 
+**Embeddings et indexation** (fin de `normalize_raw_document`, avant le commit) :
+génération d'un embedding local (`sentence-transformers`, `app/embeddings/`, aucune clé
+API — voir README § IA & coûts) et mise a jour de `search_tsv` (`to_tsvector('simple',
+unaccent(...))`, `app/normalization/search_index.py`), puis appel immediat de la
+deduplication (voir section 3). Embeddings et recherche sont ainsi toujours a jour a
+l'issue d'une normalisation, sans etape batch separee. `POST /api/v1/jobs/backfill-embeddings`
+complete a posteriori les jobs normalises avant l'existence de cette logique, sans
+reappeler le LLM (aucun cout d'extraction).
+
 ### 3. Enrichissement & scoring
 
-Déduplication multi-niveaux (hash exact → trigramme → cosinus sur embeddings),
-résolution d'entreprise, récupération de réputation (Trustpilot), détection
-heuristique + LLM des signaux d'arnaque, et calcul du score de compatibilité au profil
-utilisateur.
+**Déduplication multi-niveaux** (`app/services/deduplication.py`, implémentée) : hash
+exact (`dedup_hash`, titre+entreprise+début de description normalisés) → similarité
+trigramme `pg_trgm` sur le titre (contrainte : même `company_id`, pour éviter les faux
+positifs entre entreprises différentes) → similarité cosinus sur l'embedding (pgvector,
+index HNSW). Le premier job détecté reste canonique ; les suivants pointent vers lui via
+`canonical_id`, tracé dans `job_duplicate_links`. Aucune table d'URLs séparée : chaque
+job dupliqué garde sa propre `url`, récupérable via `WHERE canonical_id = X OR id = X`.
+Une repost à plusieurs semaines d'écart est détectée par ce même mécanisme, sans logique
+dédiée. Détection d'expiration minimale par ancienneté de `last_seen_at`
+(`app/services/expiry.py`) — un contrôle HTTP réel (404) reste à faire.
+
+Résolution d'entreprise, réputation (Trustpilot) et détection d'arnaque restent à
+implémenter (phase 5), de même que le score de compatibilité au profil utilisateur
+(phase 6).
 
 ### 4. Exposition
 
