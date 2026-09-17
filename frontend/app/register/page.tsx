@@ -5,13 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Rocket } from "lucide-react";
+import { Rocket01 } from "@untitledui/icons";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/components/base/buttons/button";
+import { FormInput } from "@/components/forms/form-input";
 import { registerSchema, type RegisterFormValues } from "@/lib/schemas";
 import { registerUser, loginUser, fetchCurrentUser } from "@/lib/auth-api";
 import { useAuthStore } from "@/store/auth-store";
@@ -23,11 +21,7 @@ export default function RegisterPage() {
   const setUser = useAuthStore((s) => s.setUser);
   const [submitting, setSubmitting] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<RegisterFormValues>({ resolver: zodResolver(registerSchema) });
+  const { control, handleSubmit } = useForm<RegisterFormValues>({ resolver: zodResolver(registerSchema) });
 
   const onSubmit = async (values: RegisterFormValues) => {
     setSubmitting(true);
@@ -47,49 +41,36 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <div className="mb-2 flex items-center gap-2">
-            <Rocket className="size-6 text-primary" />
-            <span className="text-lg font-semibold">LeadPilot</span>
-          </div>
-          <CardTitle>Creer un compte</CardTitle>
-          <CardDescription>Commence a construire ta base de prospection.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" autoFocus {...register("email")} />
-              {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="password">Mot de passe</Label>
-              <Input id="password" type="password" {...register("password")} />
-              {errors.password && (
-                <p className="text-sm text-destructive">{errors.password.message}</p>
-              )}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="confirmPassword">Confirmer le mot de passe</Label>
-              <Input id="confirmPassword" type="password" {...register("confirmPassword")} />
-              {errors.confirmPassword && (
-                <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>
-              )}
-            </div>
-            <Button type="submit" disabled={submitting} className="mt-2">
-              {submitting ? <Loader2 className="size-4 animate-spin" /> : "Creer mon compte"}
-            </Button>
-          </form>
-          <p className="mt-4 text-center text-sm text-muted-foreground">
-            Deja inscrit ?{" "}
-            <Link href="/login" className="font-medium text-primary hover:underline">
-              Se connecter
-            </Link>
-          </p>
-        </CardContent>
-      </Card>
+    <div className="flex min-h-screen items-center justify-center bg-secondary p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-primary p-6 shadow-lg ring-1 ring-secondary">
+        <div className="mb-6 flex items-center gap-2">
+          <Rocket01 className="size-6 text-fg-brand-primary" />
+          <span className="text-lg font-semibold text-primary">LeadPilot</span>
+        </div>
+        <h1 className="text-xl font-semibold text-primary">Creer un compte</h1>
+        <p className="mt-1 text-sm text-tertiary">Commence a construire ta base de prospection.</p>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="mt-6 flex flex-col gap-4">
+          <FormInput control={control} name="email" label="Email" type="email" autoFocus />
+          <FormInput control={control} name="password" label="Mot de passe" type="password" />
+          <FormInput
+            control={control}
+            name="confirmPassword"
+            label="Confirmer le mot de passe"
+            type="password"
+          />
+          <Button type="submit" size="lg" isLoading={submitting} className="mt-2 w-full">
+            Creer mon compte
+          </Button>
+        </form>
+
+        <p className="mt-4 text-center text-sm text-tertiary">
+          Deja inscrit ?{" "}
+          <Link href="/login" className="font-medium text-brand-secondary hover:underline">
+            Se connecter
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

@@ -1,20 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Building2, Star, Sparkles } from "lucide-react";
+import { SearchLg, Star01, Stars02 } from "@untitledui/icons";
 
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { AppShell } from "@/components/layout/app-shell";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/base/input/input";
+import { NativeSelect } from "@/components/base/select/select-native";
+import { EmptyState } from "@/components/application/empty-state/empty-state";
+import { LoadingIndicator } from "@/components/application/loading-indicator/loading-indicator";
 import { StatusBadge, STATUS_OPTIONS } from "@/components/prospects/status-badge";
 import { AddProspectDialog } from "@/components/prospects/add-prospect-dialog";
 import { ImportDialog } from "@/components/prospects/import-dialog";
@@ -38,8 +32,8 @@ export default function ProspectsPage() {
         <div className="mx-auto flex max-w-6xl flex-col gap-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-semibold tracking-tight">Prospects</h1>
-              <p className="text-muted-foreground">
+              <h1 className="text-xl font-semibold tracking-tight text-primary">Prospects</h1>
+              <p className="text-tertiary">
                 Tes entreprises, ajoutees une a une ou par import — jamais collectees automatiquement.
               </p>
             </div>
@@ -50,91 +44,85 @@ export default function ProspectsPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-[220px]">
-              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Rechercher par nom ou domaine..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-            <Select value={status} onValueChange={(value) => setStatus(value as ProspectStatus | "tout")}>
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Statut" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="tout">Tous les statuts</SelectItem>
-                {STATUS_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input
+              placeholder="Rechercher par nom ou domaine..."
+              value={search}
+              onChange={setSearch}
+              icon={SearchLg}
+              className="max-w-xs"
+            />
+            <NativeSelect
+              className="w-44"
+              options={[{ value: "tout", label: "Tous les statuts" }, ...STATUS_OPTIONS]}
+              value={status}
+              onChange={(e) => setStatus(e.target.value as ProspectStatus | "tout")}
+            />
           </div>
 
-          <Card>
-            <CardContent className="p-0">
-              {isLoading ? (
-                <div className="p-8 text-center text-sm text-muted-foreground">Chargement...</div>
-              ) : !prospects || prospects.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 p-12 text-center">
-                  <Building2 className="size-8 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    Aucun prospect pour l&apos;instant. Ajoute ta premiere entreprise.
-                  </p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nom</TableHead>
-                      <TableHead>Domaine</TableHead>
-                      <TableHead>Statut</TableHead>
-                      <TableHead>Enrichissement</TableHead>
-                      <TableHead>Ajoute le</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {prospects.map((prospect) => (
-                      <TableRow
-                        key={prospect.id}
-                        className="cursor-pointer"
-                        onClick={() => setSelectedId(prospect.id)}
-                      >
-                        <TableCell className="font-medium">{prospect.name}</TableCell>
-                        <TableCell className="text-muted-foreground">{prospect.domain ?? "—"}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={prospect.status} />
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          <div className="flex items-center gap-3">
-                            {prospect.trustpilot_rating !== null && (
-                              <span className="flex items-center gap-1">
-                                <Star className="size-3.5 text-amber-500" />
-                                {prospect.trustpilot_rating.toFixed(1)}
-                              </span>
-                            )}
-                            {prospect.ai_needs.length > 0 && (
-                              <span className="flex items-center gap-1">
-                                <Sparkles className="size-3.5 text-primary" />
-                                {prospect.ai_needs.length}
-                              </span>
-                            )}
-                            {prospect.trustpilot_rating === null && prospect.ai_needs.length === 0 && "—"}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {new Date(prospect.created_at).toLocaleDateString("fr-FR")}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+          <div className="overflow-hidden rounded-xl bg-primary shadow-xs ring-1 ring-secondary">
+            {isLoading ? (
+              <div className="flex justify-center p-8">
+                <LoadingIndicator size="sm" />
+              </div>
+            ) : !prospects || prospects.length === 0 ? (
+              <EmptyState size="sm" className="py-12">
+                <EmptyState.Header>
+                  <EmptyState.FeaturedIcon color="gray" icon={SearchLg} />
+                </EmptyState.Header>
+                <EmptyState.Content>
+                  <EmptyState.Title>Aucun prospect pour l&apos;instant</EmptyState.Title>
+                  <EmptyState.Description>Ajoute ta premiere entreprise.</EmptyState.Description>
+                </EmptyState.Content>
+              </EmptyState>
+            ) : (
+              <table className="w-full">
+                <thead className="h-11 bg-secondary">
+                  <tr>
+                    <th className="px-6 py-2 text-left text-xs font-semibold text-quaternary">Nom</th>
+                    <th className="px-6 py-2 text-left text-xs font-semibold text-quaternary">Domaine</th>
+                    <th className="px-6 py-2 text-left text-xs font-semibold text-quaternary">Statut</th>
+                    <th className="px-6 py-2 text-left text-xs font-semibold text-quaternary">Enrichissement</th>
+                    <th className="px-6 py-2 text-left text-xs font-semibold text-quaternary">Ajoute le</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {prospects.map((prospect) => (
+                    <tr
+                      key={prospect.id}
+                      className="h-16 cursor-pointer border-t border-secondary hover:bg-secondary"
+                      onClick={() => setSelectedId(prospect.id)}
+                    >
+                      <td className="px-6 py-3 text-sm font-medium text-primary">{prospect.name}</td>
+                      <td className="px-6 py-3 text-sm text-tertiary">{prospect.domain ?? "—"}</td>
+                      <td className="px-6 py-3">
+                        <StatusBadge status={prospect.status} />
+                      </td>
+                      <td className="px-6 py-3 text-sm text-tertiary">
+                        <div className="flex items-center gap-3">
+                          {prospect.trustpilot_rating !== null && (
+                            <span className="flex items-center gap-1">
+                              <Star01 className="size-3.5 text-warning-primary" />
+                              {prospect.trustpilot_rating.toFixed(1)}
+                            </span>
+                          )}
+                          {prospect.ai_needs.length > 0 && (
+                            <span className="flex items-center gap-1">
+                              <Stars02 className="size-3.5 text-utility-blue-500" />
+                              {prospect.ai_needs.length}
+                            </span>
+                          )}
+                          {prospect.trustpilot_rating === null && prospect.ai_needs.length === 0 && "—"}
+                        </div>
+                      </td>
+                      <td className="px-6 py-3 text-sm text-tertiary">
+                        {new Date(prospect.created_at).toLocaleDateString("fr-FR")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
 
         <ProspectDetailDialog id={selectedId} onOpenChange={(open) => !open && setSelectedId(null)} />

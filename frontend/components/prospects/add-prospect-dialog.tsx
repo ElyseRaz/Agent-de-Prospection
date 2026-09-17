@@ -3,23 +3,14 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Plus } from "lucide-react";
+import { Plus, X } from "@untitledui/icons";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/base/buttons/button";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
+import { Dialog, DialogTrigger, Modal, ModalOverlay } from "@/components/application/modals/modal";
+import { FormInput } from "@/components/forms/form-input";
+import { FormTextArea } from "@/components/forms/form-textarea";
 import { createProspectSchema, type CreateProspectFormValues } from "@/lib/schemas";
 import { useCreateProspect } from "@/hooks/use-prospects";
 import { ApiError } from "@/lib/api";
@@ -28,12 +19,9 @@ export function AddProspectDialog() {
   const [open, setOpen] = useState(false);
   const createProspect = useCreateProspect();
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<CreateProspectFormValues>({ resolver: zodResolver(createProspectSchema) });
+  const { control, handleSubmit, reset } = useForm<CreateProspectFormValues>({
+    resolver: zodResolver(createProspectSchema),
+  });
 
   const onSubmit = async (values: CreateProspectFormValues) => {
     try {
@@ -59,88 +47,88 @@ export function AddProspectDialog() {
   };
 
   return (
-    <Dialog
-      open={open}
+    <DialogTrigger
+      isOpen={open}
       onOpenChange={(next) => {
         setOpen(next);
         if (!next) reset();
       }}
     >
-      <DialogTrigger render={<Button><Plus className="size-4" />Ajouter un prospect</Button>} />
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Ajouter un prospect</DialogTitle>
-          <DialogDescription>
-            Toi seul apportes les entreprises — aucune collecte automatique.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 flex flex-col gap-1.5">
-              <Label htmlFor="name">Nom de l&apos;entreprise</Label>
-              <Input id="name" autoFocus {...register("name")} />
-              {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="domain">Domaine</Label>
-              <Input id="domain" placeholder="acme.com" {...register("domain")} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="websiteUrl">Site web</Label>
-              <Input id="websiteUrl" placeholder="https://acme.com" {...register("websiteUrl")} />
-              {errors.websiteUrl && (
-                <p className="text-sm text-destructive">{errors.websiteUrl.message}</p>
-              )}
-            </div>
-          </div>
+      <Button size="md" iconLeading={Plus}>
+        Ajouter un prospect
+      </Button>
+      <ModalOverlay>
+        <Modal className="w-full sm:max-w-lg">
+          <Dialog className="relative max-h-[inherit] w-full overflow-y-auto p-6 outline-hidden">
+            {({ close }) => (
+              <>
+                <ButtonUtility
+                  size="sm"
+                  color="tertiary"
+                  icon={X}
+                  tooltip="Fermer"
+                  onClick={close}
+                  className="absolute top-4 right-4"
+                />
+                <h2 className="text-lg font-semibold text-primary">Ajouter un prospect</h2>
+                <p className="mt-1 text-sm text-tertiary">
+                  Toi seul apportes les entreprises — aucune collecte automatique.
+                </p>
 
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea id="notes" rows={2} {...register("notes")} />
-          </div>
+                <form onSubmit={handleSubmit(onSubmit)} className="mt-5 flex flex-col gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                <FormInput
+                  className="col-span-2"
+                  control={control}
+                  name="name"
+                  label="Nom de l'entreprise"
+                  autoFocus
+                />
+                <FormInput control={control} name="domain" label="Domaine" placeholder="acme.com" />
+                <FormInput
+                  control={control}
+                  name="websiteUrl"
+                  label="Site web"
+                  placeholder="https://acme.com"
+                />
+              </div>
 
-          <Separator />
+              <FormTextArea control={control} name="notes" label="Notes" rows={2} />
 
-          <div className="flex flex-col gap-1">
-            <p className="text-sm font-medium">Premier contact (optionnel)</p>
-            <p className="text-xs text-muted-foreground">
-              Si tu renseignes un email, precise d&apos;ou vient ce contact.
-            </p>
-          </div>
+              <hr className="border-secondary" />
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="contactEmail">Email</Label>
-              <Input id="contactEmail" type="email" {...register("contactEmail")} />
-              {errors.contactEmail && (
-                <p className="text-sm text-destructive">{errors.contactEmail.message}</p>
-              )}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="contactFullName">Nom du contact</Label>
-              <Input id="contactFullName" {...register("contactFullName")} />
-            </div>
-            <div className="col-span-2 flex flex-col gap-1.5">
-              <Label htmlFor="sourceNote">Origine du contact (source_note)</Label>
-              <Textarea
-                id="sourceNote"
-                rows={2}
-                placeholder="Ex : page Contact publique du site, salon pro X, recommandation..."
-                {...register("sourceNote")}
-              />
-              {errors.sourceNote && (
-                <p className="text-sm text-destructive">{errors.sourceNote.message}</p>
-              )}
-            </div>
-          </div>
+              <div>
+                <p className="text-sm font-medium text-secondary">Premier contact (optionnel)</p>
+                <p className="text-xs text-tertiary">Si tu renseignes un email, precise d&apos;ou vient ce contact.</p>
+              </div>
 
-          <DialogFooter>
-            <Button type="submit" disabled={createProspect.isPending}>
-              {createProspect.isPending ? <Loader2 className="size-4 animate-spin" /> : "Ajouter"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+              <div className="grid grid-cols-2 gap-4">
+                <FormInput control={control} name="contactEmail" label="Email" type="email" />
+                <FormInput control={control} name="contactFullName" label="Nom du contact" />
+                <FormTextArea
+                  className="col-span-2"
+                  control={control}
+                  name="sourceNote"
+                  label="Origine du contact (source_note)"
+                  rows={2}
+                  placeholder="Ex : page Contact publique du site, salon pro X, recommandation..."
+                />
+              </div>
+
+              <div className="mt-2 flex justify-end gap-3">
+                <Button type="button" size="md" color="secondary" onClick={close}>
+                  Annuler
+                </Button>
+                <Button type="submit" size="md" isLoading={createProspect.isPending}>
+                  Ajouter
+                </Button>
+              </div>
+                </form>
+              </>
+            )}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+    </DialogTrigger>
   );
 }

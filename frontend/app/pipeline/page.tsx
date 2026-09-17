@@ -15,8 +15,8 @@ export default function PipelinePage() {
       <AppShell>
         <div className="flex flex-col gap-6">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Suivi</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-xl font-semibold tracking-tight text-primary">Suivi</h1>
+            <p className="text-tertiary">
               Glisse une fiche vers une autre colonne pour changer son statut, ou utilise le menu
               deroulant de la fiche.
             </p>

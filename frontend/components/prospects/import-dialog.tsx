@@ -1,19 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Loader2, Upload } from "lucide-react";
+import { UploadCloud01, X } from "@untitledui/icons";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Button } from "@/components/base/buttons/button";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
+import { Dialog, DialogTrigger, Modal, ModalOverlay } from "@/components/application/modals/modal";
 import { useImportProspects } from "@/hooks/use-prospects";
 import { ApiError } from "@/lib/api";
 import type { ImportResponse } from "@/lib/prospects-api";
@@ -39,8 +32,8 @@ export function ImportDialog() {
   };
 
   return (
-    <Dialog
-      open={open}
+    <DialogTrigger
+      isOpen={open}
       onOpenChange={(next) => {
         setOpen(next);
         if (!next) {
@@ -50,52 +43,72 @@ export function ImportDialog() {
         }
       }}
     >
-      <DialogTrigger render={<Button variant="outline"><Upload className="size-4" />Importer un CSV</Button>} />
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Importer des prospects (CSV)</DialogTitle>
-          <DialogDescription>
-            Colonnes attendues : <code>name,domain,email,source_note</code>. <code>source_note</code>{" "}
-            devient obligatoire des qu&apos;un email est fourni sur la ligne.
-          </DialogDescription>
-        </DialogHeader>
+      <Button size="md" color="secondary" iconLeading={UploadCloud01}>
+        Importer un CSV
+      </Button>
+      <ModalOverlay>
+        <Modal className="w-full sm:max-w-md">
+          <Dialog className="relative max-h-[inherit] w-full overflow-y-auto p-6 outline-hidden">
+            {({ close }) => (
+              <>
+                <ButtonUtility
+                  size="sm"
+                  color="tertiary"
+                  icon={X}
+                  tooltip="Fermer"
+                  onClick={close}
+                  className="absolute top-4 right-4"
+                />
+                <h2 className="text-lg font-semibold text-primary">Importer des prospects (CSV)</h2>
+                <p className="mt-1 text-sm text-tertiary">
+                  Colonnes attendues : <code>name,domain,email,source_note</code>.{" "}
+                  <code>source_note</code> devient obligatoire des qu&apos;un email est fourni sur la
+                  ligne.
+                </p>
 
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".csv,text/csv"
-          onChange={(e) => {
-            setFile(e.target.files?.[0] ?? null);
-            setResult(null);
-          }}
-          className="text-sm file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium"
-        />
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(e) => {
+                    setFile(e.target.files?.[0] ?? null);
+                    setResult(null);
+                  }}
+                  className="mt-4 text-sm text-tertiary file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary"
+                />
 
-        {result && (
-          <div className="rounded-md border bg-muted/50 p-3 text-sm">
-            <p className="font-medium">
-              {result.imported} importe(s), {result.skipped} ignore(s)
-            </p>
-            {result.rows.filter((r) => r.status === "error").length > 0 && (
-              <ul className="mt-2 max-h-32 list-disc space-y-0.5 overflow-y-auto pl-4 text-xs text-muted-foreground">
-                {result.rows
-                  .filter((r) => r.status === "error")
-                  .map((r) => (
-                    <li key={r.row}>
-                      Ligne {r.row} : {r.message}
-                    </li>
-                  ))}
-              </ul>
+                {result && (
+                  <div className="mt-3 rounded-md bg-secondary p-3 text-sm">
+                    <p className="font-medium text-secondary">
+                      {result.imported} importe(s), {result.skipped} ignore(s)
+                    </p>
+                    {result.rows.filter((r) => r.status === "error").length > 0 && (
+                      <ul className="mt-2 max-h-32 list-disc space-y-0.5 overflow-y-auto pl-4 text-xs text-tertiary">
+                        {result.rows
+                          .filter((r) => r.status === "error")
+                          .map((r) => (
+                            <li key={r.row}>
+                              Ligne {r.row} : {r.message}
+                            </li>
+                          ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                <div className="mt-5 flex justify-end gap-3">
+                  <Button type="button" size="md" color="secondary" onClick={close}>
+                    Annuler
+                  </Button>
+                  <Button onClick={handleImport} isDisabled={!file} isLoading={importProspects.isPending}>
+                    Importer
+                  </Button>
+                </div>
+              </>
             )}
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button onClick={handleImport} disabled={!file || importProspects.isPending}>
-            {importProspects.isPending ? <Loader2 className="size-4 animate-spin" /> : "Importer"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+    </DialogTrigger>
   );
 }

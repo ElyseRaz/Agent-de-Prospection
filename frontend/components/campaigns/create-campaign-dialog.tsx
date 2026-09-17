@@ -1,32 +1,19 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useController, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Plus, Save } from "lucide-react";
+import { Plus, Save01, X } from "@untitledui/icons";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Button } from "@/components/base/buttons/button";
+import { ButtonUtility } from "@/components/base/buttons/button-utility";
+import { Input } from "@/components/base/input/input";
+import { TextArea } from "@/components/base/textarea/textarea";
+import { NativeSelect } from "@/components/base/select/select-native";
+import { Checkbox } from "@/components/base/checkbox/checkbox";
+import { Dialog, DialogTrigger, Modal, ModalOverlay } from "@/components/application/modals/modal";
+import { FormInput } from "@/components/forms/form-input";
 import { StatusBadge } from "@/components/prospects/status-badge";
 import { createCampaignSchema, type CreateCampaignFormValues } from "@/lib/schemas";
 import { useCreateCampaign, useCreateTemplate, useTemplates } from "@/hooks/use-campaigns";
@@ -55,7 +42,7 @@ export function CreateCampaignDialog() {
   const lastFocused = useRef<"subject" | "body">("body");
 
   const {
-    register,
+    control,
     handleSubmit,
     reset,
     setValue,
@@ -66,8 +53,8 @@ export function CreateCampaignDialog() {
     defaultValues: { name: "", subject: "", body: "", companyIds: [] },
   });
 
-  const { ref: subjectFormRef, ...subjectField } = register("subject");
-  const { ref: bodyFormRef, ...bodyField } = register("body");
+  const subjectField = useController({ control, name: "subject" });
+  const bodyField = useController({ control, name: "body" });
 
   const resetAll = () => {
     reset({ name: "", subject: "", body: "", companyIds: [] });
@@ -105,7 +92,7 @@ export function CreateCampaignDialog() {
     }
   };
 
-  const applyTemplate = (templateId: string | null) => {
+  const applyTemplate = (templateId: string) => {
     const template = templates?.find((t) => t.id === templateId);
     if (!template) return;
     setValue("subject", template.subject, { shouldValidate: true });
@@ -146,176 +133,184 @@ export function CreateCampaignDialog() {
   };
 
   return (
-    <Dialog
-      open={open}
+    <DialogTrigger
+      isOpen={open}
       onOpenChange={(next) => {
         setOpen(next);
         if (!next) resetAll();
       }}
     >
-      <DialogTrigger render={<Button><Plus className="size-4" />Nouvelle campagne</Button>} />
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Nouvelle campagne</DialogTitle>
-          <DialogDescription>
-            Chaque email inclut automatiquement un lien de desinscription et respecte la limite
-            d&apos;envoi quotidienne.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="campaign-name">Nom de la campagne</Label>
-            <Input id="campaign-name" autoFocus {...register("name")} />
-            {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
-          </div>
-
-          {templates && templates.length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              <Label>Charger un modele</Label>
-              <Select onValueChange={applyTemplate}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choisir un modele existant (optionnel)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {templates.map((template) => (
-                    <SelectItem key={template.id} value={template.id}>
-                      {template.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">Inserer une variable :</span>
-            {VARIABLES.map((variable) => (
-              <Button
-                key={variable.token}
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-6 px-2 text-xs"
-                onClick={() => insertVariable(variable.token)}
-              >
-                {variable.label}
-              </Button>
-            ))}
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="campaign-subject">Objet</Label>
-            <Input
-              id="campaign-subject"
-              {...subjectField}
-              ref={(el) => {
-                subjectFormRef(el);
-                subjectRef.current = el;
-              }}
-              onFocus={() => (lastFocused.current = "subject")}
-            />
-            {errors.subject && <p className="text-sm text-destructive">{errors.subject.message}</p>}
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="campaign-body">Message</Label>
-            <Textarea
-              id="campaign-body"
-              rows={6}
-              {...bodyField}
-              ref={(el) => {
-                bodyFormRef(el);
-                bodyRef.current = el;
-              }}
-              onFocus={() => (lastFocused.current = "body")}
-            />
-            {errors.body && <p className="text-sm text-destructive">{errors.body.message}</p>}
-          </div>
-
-          <div className="flex items-center justify-between">
-            {showSaveTemplate ? (
-              <div className="flex flex-1 items-center gap-2">
-                <Input
-                  placeholder="Nom du modele"
-                  value={templateName}
-                  onChange={(e) => setTemplateName(e.target.value)}
-                  className="h-8"
-                />
-                <Button
-                  type="button"
+      <Button size="md" iconLeading={Plus}>
+        Nouvelle campagne
+      </Button>
+      <ModalOverlay>
+        <Modal className="w-full sm:max-w-2xl">
+          <Dialog className="relative max-h-[inherit] w-full overflow-y-auto p-6 outline-hidden">
+            {({ close }) => (
+              <>
+                <ButtonUtility
                   size="sm"
-                  variant="secondary"
-                  disabled={createTemplate.isPending || !templateName.trim()}
-                  onClick={handleSaveTemplate}
-                >
-                  {createTemplate.isPending ? <Loader2 className="size-4 animate-spin" /> : "Confirmer"}
+                  color="tertiary"
+                  icon={X}
+                  tooltip="Fermer"
+                  onClick={close}
+                  className="absolute top-4 right-4"
+                />
+                <h2 className="text-lg font-semibold text-primary">Nouvelle campagne</h2>
+                <p className="mt-1 text-sm text-tertiary">
+                  Chaque email inclut automatiquement un lien de desinscription et respecte la limite
+                  d&apos;envoi quotidienne.
+                </p>
+
+                <form onSubmit={handleSubmit(onSubmit)} className="mt-5 flex flex-col gap-4">
+              <FormInput control={control} name="name" label="Nom de la campagne" autoFocus />
+
+              {templates && templates.length > 0 && (
+                <NativeSelect
+                  label="Charger un modele"
+                  options={[
+                    { value: "", label: "Choisir un modele existant (optionnel)", disabled: true },
+                    ...templates.map((t) => ({ value: t.id, label: t.name })),
+                  ]}
+                  defaultValue=""
+                  onChange={(e) => e.target.value && applyTemplate(e.target.value)}
+                />
+              )}
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-tertiary">Inserer une variable :</span>
+                {VARIABLES.map((variable) => (
+                  <Button
+                    key={variable.token}
+                    type="button"
+                    size="sm"
+                    color="secondary"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => insertVariable(variable.token)}
+                  >
+                    {variable.label}
+                  </Button>
+                ))}
+              </div>
+
+              <Input
+                label="Objet"
+                isInvalid={!!errors.subject}
+                hint={errors.subject?.message}
+                value={subjectField.field.value}
+                onChange={subjectField.field.onChange}
+                onBlur={subjectField.field.onBlur}
+                ref={(el) => {
+                  subjectField.field.ref(el);
+                  subjectRef.current = el;
+                }}
+                onFocus={() => (lastFocused.current = "subject")}
+              />
+
+              <TextArea
+                label="Message"
+                rows={6}
+                isInvalid={!!errors.body}
+                hint={errors.body?.message}
+                value={bodyField.field.value}
+                onChange={bodyField.field.onChange}
+                onBlur={bodyField.field.onBlur}
+                textAreaRef={(el) => {
+                  bodyField.field.ref(el);
+                  bodyRef.current = el;
+                }}
+                onFocus={() => (lastFocused.current = "body")}
+              />
+
+              <div className="flex items-center justify-between">
+                {showSaveTemplate ? (
+                  <div className="flex flex-1 items-center gap-2">
+                    <Input
+                      placeholder="Nom du modele"
+                      value={templateName}
+                      onChange={setTemplateName}
+                      size="sm"
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      color="secondary"
+                      isDisabled={!templateName.trim()}
+                      isLoading={createTemplate.isPending}
+                      onClick={handleSaveTemplate}
+                    >
+                      Confirmer
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    color="tertiary"
+                    iconLeading={Save01}
+                    onClick={() => setShowSaveTemplate(true)}
+                  >
+                    Enregistrer comme modele
+                  </Button>
+                )}
+              </div>
+
+              <hr className="border-secondary" />
+
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-secondary">Destinataires</p>
+                  <span className="text-xs text-tertiary">
+                    {selectedIds.size} entreprise{selectedIds.size > 1 ? "s" : ""} selectionnee
+                    {selectedIds.size > 1 ? "s" : ""}
+                  </span>
+                </div>
+                <p className="text-xs text-tertiary">
+                  Tous les contacts des entreprises selectionnees recevront cet email (hors
+                  desinscrits).
+                </p>
+                {errors.companyIds && <p className="text-sm text-error-primary">{errors.companyIds.message}</p>}
+                <div className="max-h-56 overflow-y-auto rounded-md ring-1 ring-secondary">
+                  {loadingProspects ? (
+                    <div className="p-4 text-center text-sm text-tertiary">Chargement...</div>
+                  ) : !prospects || prospects.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-tertiary">
+                      Aucun prospect. Ajoute des entreprises avant de creer une campagne.
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-secondary">
+                      {prospects.map((prospect) => (
+                        <li key={prospect.id}>
+                          <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-secondary">
+                            <Checkbox
+                              isSelected={selectedIds.has(prospect.id)}
+                              onChange={() => toggleCompany(prospect.id)}
+                            />
+                            <span className="flex-1 font-medium text-secondary">{prospect.name}</span>
+                            <StatusBadge status={prospect.status} />
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-2 flex justify-end gap-3">
+                <Button type="button" color="secondary" onClick={close}>
+                  Annuler
+                </Button>
+                <Button type="submit" isLoading={createCampaign.isPending}>
+                  Creer la campagne
                 </Button>
               </div>
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => setShowSaveTemplate(true)}
-              >
-                <Save className="size-4" />
-                Enregistrer comme modele
-              </Button>
+                </form>
+              </>
             )}
-          </div>
-
-          <Separator />
-
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Destinataires</p>
-              <span className="text-xs text-muted-foreground">
-                {selectedIds.size} entreprise{selectedIds.size > 1 ? "s" : ""} selectionnee
-                {selectedIds.size > 1 ? "s" : ""}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Tous les contacts des entreprises selectionnees recevront cet email (hors
-              desinscrits).
-            </p>
-            {errors.companyIds && (
-              <p className="text-sm text-destructive">{errors.companyIds.message}</p>
-            )}
-            <div className="max-h-56 overflow-y-auto rounded-md border">
-              {loadingProspects ? (
-                <div className="p-4 text-center text-sm text-muted-foreground">Chargement...</div>
-              ) : !prospects || prospects.length === 0 ? (
-                <div className="p-4 text-center text-sm text-muted-foreground">
-                  Aucun prospect. Ajoute des entreprises avant de creer une campagne.
-                </div>
-              ) : (
-                <ul className="divide-y">
-                  {prospects.map((prospect) => (
-                    <li key={prospect.id}>
-                      <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-muted/50">
-                        <input
-                          type="checkbox"
-                          className="size-4 accent-primary"
-                          checked={selectedIds.has(prospect.id)}
-                          onChange={() => toggleCompany(prospect.id)}
-                        />
-                        <span className="flex-1 font-medium">{prospect.name}</span>
-                        <StatusBadge status={prospect.status} />
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button type="submit" disabled={createCampaign.isPending}>
-              {createCampaign.isPending ? <Loader2 className="size-4 animate-spin" /> : "Creer la campagne"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+    </DialogTrigger>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { LoadingIndicator } from "@/components/application/loading-indicator/loading-indicator";
 import { useAuthStore } from "@/store/auth-store";
 
 /** Protection cote client : attend l'hydratation du store persiste avant de
@@ -22,7 +22,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   if (!hasHydrated || !accessToken) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        <LoadingIndicator type="line-spinner" size="md" />
       </div>
     );
   }

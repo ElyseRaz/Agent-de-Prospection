@@ -12,6 +12,14 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored Untitled UI components/hooks (installed via `npx untitledui add`,
+    // never hand-edited - re-vendored wholesale on `untitledui upgrade`).
+    "components/base/**",
+    "components/application/**",
+    "components/foundations/**",
+    "components/shared-assets/**",
+    "hooks/use-breakpoint.ts",
+    "hooks/use-resize-observer.ts",
   ]),
 ]);
 

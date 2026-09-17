@@ -2,32 +2,24 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  LayoutDashboard,
-  Users,
-  Kanban,
-  Mail,
-  Settings,
-  LogOut,
-  Rocket,
-} from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { LayoutAlt01, Users01, BarChartSquare02, Mail01, Settings01, LogOut01, Rocket01 } from "@untitledui/icons";
+import { Button as AriaButton } from "react-aria-components";
+
+import { Avatar } from "@/components/base/avatar/avatar";
+import { AvatarLabelGroup } from "@/components/base/avatar/avatar-label-group";
+import { Dropdown } from "@/components/base/dropdown/dropdown";
 import { useAuthStore } from "@/store/auth-store";
-import { cn } from "@/lib/utils";
+import { cx } from "@/lib/utils/cx";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Tableau de bord", icon: LayoutDashboard },
-  { href: "/prospects", label: "Prospects", icon: Users },
-  { href: "/pipeline", label: "Suivi", icon: Kanban },
-  { href: "/campaigns", label: "Campagnes", icon: Mail },
-  { href: "/settings", label: "Parametres", icon: Settings },
+  { href: "/", label: "Tableau de bord", icon: LayoutAlt01 },
+  { href: "/prospects", label: "Prospects", icon: Users01 },
+  { href: "/pipeline", label: "Suivi", icon: BarChartSquare02 },
+  { href: "/campaigns", label: "Campagnes", icon: Mail01 },
+  { href: "/settings", label: "Parametres", icon: Settings01 },
 ];
+
+const SIDEBAR_WIDTH = 260;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -37,12 +29,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
-      <aside className="hidden w-64 shrink-0 border-r bg-sidebar md:flex md:flex-col">
-        <div className="flex items-center gap-2 px-6 py-5">
-          <Rocket className="size-6 text-primary" />
-          <span className="text-lg font-semibold tracking-tight">LeadPilot</span>
+      <aside
+        style={{ "--width": `${SIDEBAR_WIDTH}px` } as React.CSSProperties}
+        className="fixed inset-y-0 left-0 z-20 hidden w-(--width) flex-col border-r border-secondary bg-primary pt-5 md:flex"
+      >
+        <div className="flex items-center gap-2 px-5">
+          <Rocket01 className="size-6 text-fg-brand-primary" />
+          <span className="text-lg font-semibold tracking-tight text-primary">LeadPilot</span>
         </div>
-        <nav className="flex flex-1 flex-col gap-1 px-3">
+
+        <nav className="flex flex-1 flex-col gap-0.5 px-4 pt-5">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
@@ -50,50 +46,73 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-primary text-primary-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent",
+                aria-current={active ? "page" : undefined}
+                className={cx(
+                  "flex items-center gap-2 rounded-md p-2 text-sm font-semibold transition duration-100 ease-linear",
+                  active ? "bg-brand-primary text-brand-secondary" : "text-secondary hover:bg-primary_hover",
                 )}
               >
-                <Icon className="size-4" />
+                <Icon className={cx("size-5 shrink-0", active ? "text-fg-brand-primary" : "text-fg-quaternary")} />
                 {item.label}
               </Link>
             );
           })}
         </nav>
-      </aside>
 
-      <div className="flex flex-1 flex-col">
-        <header className="flex items-center justify-between border-b px-6 py-3">
-          <div className="md:hidden flex items-center gap-2">
-            <Rocket className="size-5 text-primary" />
-            <span className="font-semibold">LeadPilot</span>
-          </div>
-          <div className="ml-auto flex items-center gap-3">
-            <DropdownMenu>
-              <DropdownMenuTrigger className="flex items-center gap-2 rounded-full outline-none">
-                <Avatar className="size-8">
-                  <AvatarFallback>{user?.email?.[0]?.toUpperCase() ?? "U"}</AvatarFallback>
-                </Avatar>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">{user?.email}</div>
-                <DropdownMenuItem
-                  onClick={() => {
+        <div className="border-t border-secondary p-4">
+          <Dropdown.Root>
+            <AriaButton className="flex w-full cursor-pointer items-center rounded-lg p-1.5 text-left outline-focus-ring transition duration-100 ease-linear hover:bg-primary_hover focus-visible:outline-2 focus-visible:outline-offset-2">
+              <AvatarLabelGroup
+                size="sm"
+                initials={user?.email?.[0]?.toUpperCase() ?? "U"}
+                title={user?.email ?? ""}
+                subtitle="Compte"
+              />
+            </AriaButton>
+            <Dropdown.Popover placement="top right" className="w-56">
+              <Dropdown.Menu
+                onAction={(key) => {
+                  if (key === "logout") {
                     logout();
                     router.replace("/login");
-                  }}
-                >
-                  <LogOut className="mr-2 size-4" />
-                  Se deconnecter
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  }
+                }}
+              >
+                <Dropdown.Item id="logout" label="Se deconnecter" icon={LogOut01} />
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown.Root>
+        </div>
+      </aside>
+
+      <div
+        style={{ "--width": `${SIDEBAR_WIDTH}px` } as React.CSSProperties}
+        className="flex flex-1 flex-col md:pl-(--width)"
+      >
+        <header className="flex items-center justify-between border-b border-secondary px-4 py-3 md:hidden">
+          <div className="flex items-center gap-2">
+            <Rocket01 className="size-5 text-fg-brand-primary" />
+            <span className="font-semibold text-primary">LeadPilot</span>
           </div>
+          <Dropdown.Root>
+            <AriaButton className="cursor-pointer rounded-full outline-focus-ring focus-visible:outline-2">
+              <Avatar size="sm" initials={user?.email?.[0]?.toUpperCase() ?? "U"} />
+            </AriaButton>
+            <Dropdown.Popover placement="bottom right" className="w-56">
+              <Dropdown.Menu
+                onAction={(key) => {
+                  if (key === "logout") {
+                    logout();
+                    router.replace("/login");
+                  }
+                }}
+              >
+                <Dropdown.Item id="logout" label="Se deconnecter" icon={LogOut01} />
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown.Root>
         </header>
-        <main className="flex-1 bg-muted/30 p-6">{children}</main>
+        <main className="flex-1 bg-secondary p-6">{children}</main>
       </div>
     </div>
   );
