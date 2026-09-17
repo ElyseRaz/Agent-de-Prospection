@@ -1,20 +1,19 @@
-name: remoteradar
+name: leadpilot
 
 services:
   db:
-    image: pgvector/pgvector:pg16
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-remoteradar}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-remoteradar}
-      POSTGRES_DB: ${POSTGRES_DB:-remoteradar}
+      POSTGRES_USER: ${POSTGRES_USER:-leadpilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-leadpilot}
+      POSTGRES_DB: ${POSTGRES_DB:-leadpilot}
     volumes:
       - db_data:/var/lib/postgresql/data
-      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-remoteradar}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-leadpilot}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -30,11 +29,29 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    image: migrate/migrate:v4.17.1
+    restart: "no"
+    profiles: ["tools"]
+    entrypoint: ["migrate"]
+    command:
+      - "-path=/migrations"
+      - "-database=${DATABASE_URL}"
+      - "up"
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+
   api:
     build:
       context: ./backend
-      target: dev
+      target: runtime
     restart: unless-stopped
+    command: ["api"]
     env_file:
       - .env
     environment:
@@ -45,19 +62,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./backend/app:/app/app
-      - ./backend/alembic:/app/alembic
-      - ./backend/tests:/app/tests
     ports:
       - "8000:8000"
 
   worker:
     build:
       context: ./backend
-      target: dev
+      target: runtime
     restart: unless-stopped
-    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=info"]
+    command: ["worker"]
     env_file:
       - .env
     environment:
@@ -68,38 +81,23 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./backend/app:/app/app
-
-  beat:
-    build:
-      context: ./backend
-      target: dev
-    restart: unless-stopped
-    command: ["celery", "-A", "app.worker.celery_app", "beat", "--loglevel=info"]
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./backend/app:/app/app
 
   frontend:
     build:
       context: ./frontend
       target: dev
     restart: unless-stopped
+    environment:
+      API_ORIGIN: http://api:8000
     volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/index.html:/app/index.html
+      - ./frontend/app:/app/app
+      - ./frontend/components:/app/components
+      - ./frontend/lib:/app/lib
+      - ./frontend/store:/app/store
     ports:
-      - "5173:5173"
+      - "3000:3000"
+    depends_on:
+      - api
 
   nginx:
     image: nginx:1.27-alpine

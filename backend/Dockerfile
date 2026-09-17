@@ -1,33 +1,16 @@
-FROM python:3.12-slim AS base
+FROM golang:1.23-alpine AS build
+WORKDIR /src
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+COPY go.mod go.sum ./
+RUN go mod download
 
-WORKDIR /app
+COPY . .
+RUN CGO_ENABLED=0 go build -o /out/api ./cmd/api
+RUN CGO_ENABLED=0 go build -o /out/worker ./cmd/worker
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc libpq-dev curl \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY pyproject.toml ./
-COPY app ./app
-COPY alembic ./alembic
-COPY alembic.ini ./
-
-RUN pip install --no-cache-dir .
-
-# Pre-telecharge le modele d'embedding au build (une fois, en cache dans
-# l'image) : les conteneurs n'ont jamais besoin de reseau au demarrage pour
-# les embeddings. Augmente la taille de l'image (~1-2 Go) et le temps de
-# build, en echange d'un demarrage rapide et hors-ligne des conteneurs.
-RUN python -c "from sentence_transformers import SentenceTransformer; \
-    SentenceTransformer('paraphrase-multilingual-mpnet-base-v2')"
-
-FROM base AS dev
-RUN pip install --no-cache-dir .[dev]
-COPY tests ./tests
-
+FROM alpine:3.20 AS runtime
+RUN apk add --no-cache ca-certificates
+COPY --from=build /out/api /usr/local/bin/api
+COPY --from=build /out/worker /usr/local/bin/worker
 EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["api"]

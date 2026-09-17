@@ -1,4 +1,4 @@
-.PHONY: up down build logs migrate makemigration test lint shell-api shell-db ps clean
+.PHONY: up down build logs migrate makemigration sqlc test lint shell-api shell-db ps clean
 
 ENV_FILE := .env
 
@@ -23,22 +23,22 @@ ps:
 	docker compose ps
 
 migrate: $(ENV_FILE)
-	docker compose exec api alembic upgrade head
+	docker compose run --rm migrate
 
-makemigration: $(ENV_FILE)
-	docker compose exec api alembic revision --autogenerate -m "$(m)"
+sqlc:
+	docker run --rm -v "$(CURDIR)/backend:/src" -w /src sqlc/sqlc generate
 
 test:
-	docker compose exec api pytest --cov=app --cov-report=term-missing
+	docker run --rm -v "$(CURDIR)/backend:/src" -w /src golang:1.23-alpine go test ./...
 
 lint:
-	docker compose exec api ruff check app tests
+	docker run --rm -v "$(CURDIR)/backend:/src" -w /src golangci/golangci-lint:latest golangci-lint run
 
 shell-api:
-	docker compose exec api bash
+	docker compose exec api sh
 
 shell-db:
-	docker compose exec db psql -U $${POSTGRES_USER:-remoteradar} -d $${POSTGRES_DB:-remoteradar}
+	docker compose exec db psql -U $${POSTGRES_USER:-leadpilot} -d $${POSTGRES_DB:-leadpilot}
 
 clean:
 	docker compose down -v
