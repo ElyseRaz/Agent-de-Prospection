@@ -4,15 +4,20 @@ import { Users, Mail, TrendingUp, Target } from "lucide-react";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-const STATS = [
-  { label: "Prospects actifs", value: "0", icon: Users },
-  { label: "Emails envoyes ce mois", value: "0", icon: Mail },
-  { label: "Taux de reponse", value: "—", icon: TrendingUp },
-  { label: "Conversions", value: "0", icon: Target },
-];
+import { useProspects } from "@/hooks/use-prospects";
 
 export default function DashboardPage() {
+  const { data: prospects, isLoading } = useProspects({});
+  const activeCount = prospects?.filter((p) => p.status !== "lost").length ?? 0;
+  const convertedCount = prospects?.filter((p) => p.status === "converted").length ?? 0;
+
+  const stats = [
+    { label: "Prospects actifs", value: isLoading ? "…" : String(activeCount), icon: Users },
+    { label: "Emails envoyes ce mois", value: "0", icon: Mail },
+    { label: "Taux de reponse", value: "—", icon: TrendingUp },
+    { label: "Conversions", value: isLoading ? "…" : String(convertedCount), icon: Target },
+  ];
+
   return (
     <AuthGuard>
       <AppShell>
@@ -25,7 +30,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {STATS.map((stat) => {
+            {stats.map((stat) => {
               const Icon = stat.icon;
               return (
                 <Card key={stat.label}>
@@ -48,9 +53,8 @@ export default function DashboardPage() {
               <CardTitle>Prochaines etapes</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              Le socle (authentification, structure de l&apos;application) est en place. Les
-              prospects, l&apos;enrichissement IA et les campagnes email arrivent dans les
-              phases suivantes.
+              Le CRM de prospection est en place. L&apos;enrichissement IA (Trustpilot, analyse
+              de site) et les campagnes email arrivent dans les phases suivantes.
             </CardContent>
           </Card>
         </div>

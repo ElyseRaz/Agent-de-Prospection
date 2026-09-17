@@ -11,6 +11,51 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type CompanyStatus string
+
+const (
+	CompanyStatusNew       CompanyStatus = "new"
+	CompanyStatusContacted CompanyStatus = "contacted"
+	CompanyStatusReplied   CompanyStatus = "replied"
+	CompanyStatusConverted CompanyStatus = "converted"
+	CompanyStatusLost      CompanyStatus = "lost"
+)
+
+func (e *CompanyStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = CompanyStatus(s)
+	case string:
+		*e = CompanyStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for CompanyStatus: %T", src)
+	}
+	return nil
+}
+
+type NullCompanyStatus struct {
+	CompanyStatus CompanyStatus `json:"company_status"`
+	Valid         bool          `json:"valid"` // Valid is true if CompanyStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullCompanyStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.CompanyStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.CompanyStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullCompanyStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.CompanyStatus), nil
+}
+
 type UserRole string
 
 const (
@@ -51,6 +96,27 @@ func (ns NullUserRole) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.UserRole), nil
+}
+
+type Company struct {
+	ID         pgtype.UUID        `json:"id"`
+	UserID     pgtype.UUID        `json:"user_id"`
+	Name       string             `json:"name"`
+	Domain     pgtype.Text        `json:"domain"`
+	WebsiteUrl pgtype.Text        `json:"website_url"`
+	Status     CompanyStatus      `json:"status"`
+	Notes      pgtype.Text        `json:"notes"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Contact struct {
+	ID         pgtype.UUID        `json:"id"`
+	CompanyID  pgtype.UUID        `json:"company_id"`
+	Email      string             `json:"email"`
+	FullName   pgtype.Text        `json:"full_name"`
+	SourceNote string             `json:"source_note"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
 type User struct {

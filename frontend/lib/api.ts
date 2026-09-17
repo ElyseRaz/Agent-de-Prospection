@@ -15,7 +15,18 @@ export class ApiError extends Error {
 interface ApiFetchOptions {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
+  query?: Record<string, string | undefined>;
   skipAuth?: boolean;
+}
+
+function buildQueryString(query: ApiFetchOptions["query"]): string {
+  if (!query) return "";
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== "") params.set(key, value);
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
 }
 
 let refreshPromise: Promise<string | null> | null = null;
@@ -72,8 +83,8 @@ async function parseJsonSafe(response: Response): Promise<unknown> {
  * (meme pattern que RemoteRadar). Les routes /api/* sont proxy-ees vers
  * l'API Go par next.config.ts (rewrites). */
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
-  const { method = "GET", body, skipAuth = false } = options;
-  const url = `/api/v1${path}`;
+  const { method = "GET", body, query, skipAuth = false } = options;
+  const url = `/api/v1${path}${buildQueryString(query)}`;
 
   const doFetch = async (): Promise<Response> => {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -101,5 +112,35 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   }
 
   if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
+/** Variante multipart/form-data (pas de Content-Type JSON, le navigateur
+ * pose lui-meme le boundary) - utilisee pour l'import CSV. Meme retry sur
+ * 401 que apiFetch. */
+export async function apiUpload<T>(path: string, file: File, fieldName = "file"): Promise<T> {
+  const url = `/api/v1${path}`;
+
+  const doFetch = async (): Promise<Response> => {
+    const formData = new FormData();
+    formData.append(fieldName, file);
+    const headers: Record<string, string> = {};
+    const token = useAuthStore.getState().accessToken;
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return fetch(url, { method: "POST", headers, body: formData });
+  };
+
+  let response = await doFetch();
+
+  if (response.status === 401) {
+    const newToken = await refreshAccessToken();
+    if (newToken) response = await doFetch();
+  }
+
+  if (!response.ok) {
+    const errorBody = await parseJsonSafe(response);
+    throw new ApiError(response.status, extractErrorMessage(errorBody, `Erreur ${response.status}`), errorBody);
+  }
+
   return (await response.json()) as T;
 }

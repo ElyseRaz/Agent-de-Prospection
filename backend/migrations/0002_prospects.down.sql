@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS contacts;
+DROP TABLE IF EXISTS companies;
+DROP TYPE IF EXISTS company_status;

@@ -94,6 +94,7 @@ services:
       - ./frontend/components:/app/components
       - ./frontend/lib:/app/lib
       - ./frontend/store:/app/store
+      - ./frontend/hooks:/app/hooks
     ports:
       - "3000:3000"
     depends_on:

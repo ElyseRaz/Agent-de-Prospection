@@ -9,6 +9,7 @@ import (
 	"leadpilot/internal/config"
 	"leadpilot/internal/db/sqlc"
 	"leadpilot/internal/health"
+	"leadpilot/internal/prospects"
 )
 
 const apiV1Prefix = "/api/v1"
@@ -37,6 +38,7 @@ func New(cfg config.Config, pool *pgxpool.Pool) *echo.Echo {
 
 	queries := sqlc.New(pool)
 	authHandlers := auth.NewHandlers(queries, cfg.SecretKey, cfg.AccessTokenExpiry, cfg.RefreshTokenExpiry)
+	prospectHandlers := prospects.NewHandlers(queries)
 
 	e.GET("/health", health.Handler(pool))
 
@@ -45,6 +47,16 @@ func New(cfg config.Config, pool *pgxpool.Pool) *echo.Echo {
 	authGroup.POST("/login", authHandlers.Login)
 	authGroup.POST("/refresh", authHandlers.Refresh)
 	authGroup.GET("/me", authHandlers.Me, auth.RequireAuth(cfg.SecretKey))
+
+	prospectGroup := e.Group(apiV1Prefix+"/prospects", auth.RequireAuth(cfg.SecretKey))
+	prospectGroup.POST("", prospectHandlers.CreateCompany)
+	prospectGroup.GET("", prospectHandlers.ListCompanies)
+	prospectGroup.POST("/import", prospectHandlers.ImportCompanies)
+	prospectGroup.GET("/:id", prospectHandlers.GetCompany)
+	prospectGroup.PATCH("/:id", prospectHandlers.UpdateCompany)
+	prospectGroup.DELETE("/:id", prospectHandlers.DeleteCompany)
+	prospectGroup.POST("/:id/contacts", prospectHandlers.CreateContact)
+	prospectGroup.DELETE("/:id/contacts/:contactId", prospectHandlers.DeleteContact)
 
 	return e
 }
