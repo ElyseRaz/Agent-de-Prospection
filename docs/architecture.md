@@ -12,6 +12,12 @@ source de données ou un canal de notification ne demande jamais de modifier le 
 └─────────────┘   └────────────────┘   └───────────────────────┘   └──────────────┘
 ```
 
+Les sous-sections ci-dessous détaillent ces 4 couches (1 à 3, puis 6 pour l'exposition) ;
+2 sujets transverses y sont documentés à part faute de mieux s'insérer dans le schéma
+d'origine : le choix du fournisseur LLM (section 4, détail technique traversant les
+couches Normalisation et Enrichissement) et les profils/matching (section 5, une
+extension du modèle à 4 couches plutôt qu'une 5e couche à proprement parler).
+
 ### 1. Collecte
 
 Chaque source implémente l'interface `SourceConnector` (`backend/app/collectors/base.py`) :
@@ -108,11 +114,89 @@ Une repost à plusieurs semaines d'écart est détectée par ce même mécanisme
 dédiée. Détection d'expiration minimale par ancienneté de `last_seen_at`
 (`app/services/expiry.py`) — un contrôle HTTP réel (404) reste à faire.
 
-Résolution d'entreprise, réputation (Trustpilot) et détection d'arnaque restent à
-implémenter (phase 5), de même que le score de compatibilité au profil utilisateur
-(phase 6).
+**Réputation entreprise** (`app/reputation/`, `app/services/reputation.py`) : API
+Business Units **publique** de Trustpilot (authentification `apikey`, endpoints
+confirmés via la doc officielle — `GET /business-units/find?name=<domaine>` puis
+`GET /business-units/{id}` pour `score.trustScore`/`numberOfReviews.total`). Limitation
+structurelle : cette API ne recherche que par domaine exact, jamais par nom en texte
+libre — la réputation n'est donc vérifiée que si le LLM a détecté un `company_domain`
+explicite dans l'annonce (champ ajouté au schéma d'extraction phase 3), ce qui reste
+rare en pratique. Cache 30 jours par entreprise (`company_reputation`, `UNIQUE(company_id,
+provider)`) ; une ligne avec `rating=NULL` signifie "vérifié, absent de Trustpilot"
+(signal `COMPANY_NOT_FOUND` légitime), à ne jamais confondre avec "jamais vérifié"
+(aucune ligne). Une panne Trustpilot (`ReputationLookupError`) ne produit jamais de faux
+signal : l'ancienne valeur en cache est conservée.
 
-### 4. Exposition
+**Score de risque** (`app/services/risk.py`, `app/normalization/risk_extraction.py`,
+prompt `detect_scam_v1.md`) : signaux déterministes calculés en Python (budget déclaré,
+TJM vs médiane du marché pour la même séniorité via `percentile_cont`, réputation
+Trustpilot si connue, nombre d'entreprises distinctes dans un cluster de doublons phase 4,
+présence en liste noire partagée) transmis en contexte à un second appel LLM (même
+mécanisme cache/retry/coût que l'extraction phase 3, `purpose="detect_scam"`) qui
+synthétise `{risk_score, reasons}` et détecte en plus les signaux non structurés
+(test non payé, contact personnel uniquement, périmètre flou, paiement demandé en amont).
+Une entrée de liste noire **partagée** court-circuite entièrement l'appel LLM
+(`risk_score=100`, code `BLACKLISTED` — jamais généré par le LLM). Déclenché
+explicitement (`POST /api/v1/jobs/assess-risk`, tâche Celery `risk.assess_pending`),
+jamais automatiquement à la normalisation, pour garder le contrôle du coût (2e appel LLM
+payant par offre).
+
+**Liste noire** (`app/models/blacklist.py`, `app/services/blacklist.py`) : entrées
+partagées (`user_id=NULL`, visibles de tous, seules à influencer le `risk_score` public)
+ou personnelles (visibles de leur auteur uniquement). Valeurs normalisées de la même
+façon que la résolution d'entreprise, pour garantir la correspondance lors de la
+vérification.
+
+### 4. Fournisseur LLM configurable
+
+`app/normalization/llm_common.py` et `app/normalization/openai_compatible.py` :
+`extract_job_structured` (phase 3) et `assess_risk_structured` (phase 5) restent
+inchangés — seul le *backend* injecté change.
+`build_job_extraction_backend`/`build_risk_assessment_backend` lisent
+`settings.llm_provider` (`anthropic` par défaut, jamais changé automatiquement) et
+construisent soit le backend Claude existant, soit `OpenAICompatible*Backend`, qui parle
+en HTTP direct (pas de SDK tiers) au contrat REST "chat completions" (`response_format:
+json_object`) que toute passerelle "OpenAI-compatible" s'engage à respecter — même choix
+que pour Frankfurter/Trustpilot : s'appuyer sur un contrat REST documenté plutôt que sur
+les internals non vérifiés d'un SDK tiers. `PRICING_USD_PER_MTOK` n'a de tarif que pour
+les modèles Claude ; un modèle inconnu (ex. exposé par une passerelle tierce) journalise
+un coût de 0$ jusqu'à complétion manuelle de cette table.
+
+### 5. Profils & matching
+
+**Profils freelance** (`app/models/profile.py`) : multi-profils par utilisateur
+(`user_id` FK sans contrainte d'unicité), compétences avec niveau/années/`is_required`
+(`profile_skills`, référentiel `skills` partagé avec les offres), embedding calculé sur
+nom + compétences (même modèle que les offres, même espace vectoriel).
+
+**Score de compatibilité** (`app/services/matching.py`) : 5 critères pondérés
+(`profiles.weights`, défaut `{semantic:25, skills:30, rate:25, timezone:10,
+reliability:10}`), chacun retournant une contribution en points et un libellé lisible :
+- *Sémantique* et *compétences* : contribution 0→poids (pas de pénalité, une similarité
+  ou une couverture faible ne fait que rapporter peu de points).
+- *TJM* : seul critère franchement bipolaire — plein poids au-dessus de la cible,
+  interpolation entre plancher et cible, **négatif sous le plancher** (reproduit
+  l'exemple `−25 : TJM 250€ sous votre plancher de 400€` de la spec).
+- *Fuseau horaire* : heuristique texte (nom de la région du fuseau du profil recherché
+  dans `timezone_constraint`) — **pas un parseur de plages UTC**, limitation assumée.
+- *Fiabilité* : signée autour de `risk_score=50` (neutre), négative au-delà.
+
+Candidats récupérés par ANN pgvector (embedding du profil) ou par fraîcheur si le profil
+n'a pas encore d'embedding, scorés en Python, mis en cache dans `matches` (upsert).
+
+**Apprentissage implicite** (`match_feedback`) : à partir de 3 offres sauvegardées et 3
+rejetées pour un profil, compare la contribution moyenne de chaque critère entre les deux
+groupes (déjà stockée dans `matches.breakdown`) et ajuste les poids en conséquence (taux
+d'apprentissage faible, poids bornés `[5, 50]`, renormalisés à 100). Heuristique simple
+et testable, pas un modèle entraîné — cohérent avec l'absence d'infrastructure ML dans le
+projet. Sous le seuil de 3+3, aucun ajustement (évite de sur-réagir à un seul clic).
+
+`excluded_industries`/`desired_contract_types` sont stockés sur le profil mais **non
+exploités dans le score** : ni `jobs` ni `companies` n'ont de champ secteur (décision
+prise en phase 5, aucune source de données assignée) — champs réservés pour une extension
+future, pas des signaux fabriqués.
+
+### 6. Exposition
 
 API REST documentée en OpenAPI (FastAPI génère `/docs` et `/openapi.json`
 automatiquement) + flux SSE pour le temps réel, consommés par le frontend React.

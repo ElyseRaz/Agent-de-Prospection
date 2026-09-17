@@ -2,10 +2,15 @@ import uuid
 
 import pytest
 
-from app.api.deps import get_embedding_backend
+from app.api.deps import get_embedding_backend, get_reputation_provider, get_risk_backend
 from app.models.job import Job, JobStatus
 from app.models.source import AccessType, Source
-from tests.conftest import FakeEmbeddingBackend, promote_to_admin
+from tests.conftest import (
+    FakeEmbeddingBackend,
+    FakeRiskAssessmentBackend,
+    make_risk_assessment,
+    promote_to_admin,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -165,3 +170,36 @@ async def test_mark_expired_forbidden_for_non_admin(client):
         "/api/v1/jobs/mark-expired", headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 403
+
+
+async def test_assess_risk_forbidden_for_non_admin(client, app):
+    app.dependency_overrides[get_risk_backend] = lambda: FakeRiskAssessmentBackend([])
+    app.dependency_overrides[get_reputation_provider] = lambda: None
+    try:
+        token = await _login(client)
+        response = await client.post(
+            "/api/v1/jobs/assess-risk", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 403
+    finally:
+        app.dependency_overrides.clear()
+
+
+async def test_assess_risk_evaluates_pending_jobs(client, db_session, app):
+    source = await _make_source(db_session)
+    await _make_job(db_session, source)
+    token = await _login_as_admin(client, db_session)
+
+    app.dependency_overrides[get_risk_backend] = lambda: FakeRiskAssessmentBackend(
+        [make_risk_assessment(risk_score=42)]
+    )
+    app.dependency_overrides[get_reputation_provider] = lambda: None
+
+    try:
+        response = await client.post(
+            "/api/v1/jobs/assess-risk", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 200
+        assert response.json() == {"assessed": 1, "failed": 0}
+    finally:
+        app.dependency_overrides.clear()

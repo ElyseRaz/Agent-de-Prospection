@@ -1,7 +1,7 @@
 import re
 import unicodedata
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,19 +15,39 @@ def normalize_company_name(name: str) -> str:
     return normalized
 
 
-async def get_or_create_company(db: AsyncSession, *, name: str) -> Company:
-    """Resolution minimale par nom normalise. La resolution avancee (domaine,
-    dedup fuzzy multi-sources) est explicitement hors scope (phase 5)."""
+def normalize_domain(domain: str) -> str:
+    cleaned = domain.strip().lower()
+    cleaned = re.sub(r"^https?://", "", cleaned)
+    cleaned = re.sub(r"^www\.", "", cleaned)
+    return cleaned.split("/")[0]
+
+
+async def get_or_create_company(
+    db: AsyncSession, *, name: str, domain: str | None = None
+) -> Company:
+    """Resolution minimale par nom normalise. La resolution avancee (dedup
+    fuzzy multi-sources) est explicitement hors scope.
+
+    `domain`, quand fourni (rarement present dans le texte source), est
+    enregistre pour permettre la recherche de reputation Trustpilot (phase 5).
+    Un domaine deja connu n'est jamais ecrase par une valeur ulterieure
+    absente."""
 
     normalized = normalize_company_name(name)
+    normalized_domain = normalize_domain(domain) if domain else None
 
     existing = await db.scalar(select(Company).where(Company.normalized_name == normalized))
     if existing is not None:
+        if normalized_domain and not existing.domain:
+            await db.execute(
+                update(Company).where(Company.id == existing.id).values(domain=normalized_domain)
+            )
+            existing.domain = normalized_domain
         return existing
 
     stmt = (
         pg_insert(Company)
-        .values(name=name.strip(), normalized_name=normalized)
+        .values(name=name.strip(), normalized_name=normalized, domain=normalized_domain)
         .on_conflict_do_nothing(constraint="uq_companies_normalized_name")
         .returning(Company.id)
     )

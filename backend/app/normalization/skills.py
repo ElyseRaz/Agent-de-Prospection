@@ -46,7 +46,7 @@ async def upsert_skills_for_job(
             continue
         seen_slugs.add(slug)
 
-        skill_id = await _get_or_create_skill_id(db, slug=slug, label=raw.strip())
+        skill_id = await get_or_create_skill_id(db, slug=slug, label=raw.strip())
 
         link_stmt = (
             pg_insert(JobSkill)
@@ -56,7 +56,9 @@ async def upsert_skills_for_job(
         await db.execute(link_stmt)
 
 
-async def _get_or_create_skill_id(db: AsyncSession, *, slug: str, label: str) -> uuid.UUID:
+async def get_or_create_skill_id(db: AsyncSession, *, slug: str, label: str) -> uuid.UUID:
+    """Get-or-create par slug dans le referentiel `skills`. Public : reutilise
+    aussi par app/services/profile.py pour les competences de profil."""
     existing = await db.scalar(select(Skill).where(Skill.slug == slug))
     if existing is not None:
         return existing.id

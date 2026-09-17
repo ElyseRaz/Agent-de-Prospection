@@ -9,49 +9,32 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.llm import LLMCall, LLMExtractionCache
-from app.normalization.llm_common import (
-    PRICING_USD_PER_MTOK,
-    ExtractionValidationError,
-    LLMUsage,
-    compute_cost_usd,
-)
+from app.normalization.llm_common import ExtractionValidationError, LLMUsage, compute_cost_usd
 from app.normalization.openai_compatible import call_openai_compatible_json
-from app.normalization.schema import ExtractedJobLLM
+from app.normalization.risk_schema import RiskAssessment
 
 if TYPE_CHECKING:
     from app.core.config import Settings
 
 log = structlog.get_logger(__name__)
 
-PURPOSE_EXTRACT_JOB = "extract_job"
-
-__all__ = [
-    "PRICING_USD_PER_MTOK",
-    "ExtractionValidationError",
-    "LLMUsage",
-    "compute_cost_usd",
-    "PURPOSE_EXTRACT_JOB",
-    "JobExtractionBackend",
-    "AnthropicJobExtractionBackend",
-    "OpenAICompatibleJobExtractionBackend",
-    "build_job_extraction_backend",
-    "extract_job_structured",
-]
+PURPOSE_DETECT_SCAM = "detect_scam"
 
 
-class JobExtractionBackend(Protocol):
-    """Seam injectable : la vraie implementation appelle l'API Anthropic (ou
-    une passerelle OpenAI-compatible, voir OpenAICompatibleJobExtractionBackend) ;
-    les tests injectent un double sans reseau ni cle API."""
+class RiskAssessmentBackend(Protocol):
+    """Seam injectable, meme principe que JobExtractionBackend (phase 3) :
+    la vraie implementation appelle l'API Anthropic, les tests injectent un
+    double sans reseau ni cle API."""
 
-    async def extract(
+    async def assess(
         self, *, system_prompt: str, user_text: str
-    ) -> tuple[ExtractedJobLLM, LLMUsage]: ...
+    ) -> tuple[RiskAssessment, LLMUsage]: ...
 
 
-class AnthropicJobExtractionBackend:
-    """Implementation reelle : appelle l'API Anthropic via le SDK officiel
-    (Structured Outputs, `messages.parse` + `output_format`)."""
+class AnthropicRiskAssessmentBackend:
+    """Implementation reelle : Structured Outputs de l'API Claude, meme
+    mecanisme que AnthropicJobExtractionBackend mais schema de sortie
+    different (RiskAssessment)."""
 
     def __init__(self, *, model: str, api_key: str | None = None) -> None:
         self._model = model
@@ -59,13 +42,13 @@ class AnthropicJobExtractionBackend:
             anthropic.AsyncAnthropic(api_key=api_key) if api_key else anthropic.AsyncAnthropic()
         )
 
-    async def extract(
+    async def assess(
         self, *, system_prompt: str, user_text: str
-    ) -> tuple[ExtractedJobLLM, LLMUsage]:
+    ) -> tuple[RiskAssessment, LLMUsage]:
         try:
             response = await self._client.messages.parse(
                 model=self._model,
-                max_tokens=4096,
+                max_tokens=2048,
                 system=[
                     {
                         "type": "text",
@@ -74,7 +57,7 @@ class AnthropicJobExtractionBackend:
                     }
                 ],
                 messages=[{"role": "user", "content": user_text}],
-                output_format=ExtractedJobLLM,
+                output_format=RiskAssessment,
             )
         except anthropic.APIStatusError as exc:
             raise ExtractionValidationError(f"Erreur API Anthropic: {exc}") from exc
@@ -96,11 +79,9 @@ class AnthropicJobExtractionBackend:
         return response.parsed_output, usage
 
 
-class OpenAICompatibleJobExtractionBackend:
-    """Implementation alternative : passerelle compatible OpenAI (ex:
-    opencode.ai), appelee en HTTP direct (voir app/normalization/openai_compatible.py
-    pour le detail et les limitations - notamment l'absence de tarif public
-    connu pour un modele expose par une passerelle tierce)."""
+class OpenAICompatibleRiskAssessmentBackend:
+    """Implementation alternative : meme passerelle OpenAI-compatible que
+    OpenAICompatibleJobExtractionBackend, schema de sortie RiskAssessment."""
 
     def __init__(
         self, *, model: str, base_url: str, api_key: str, http_client: httpx.AsyncClient
@@ -110,9 +91,9 @@ class OpenAICompatibleJobExtractionBackend:
         self._api_key = api_key
         self._http_client = http_client
 
-    async def extract(
+    async def assess(
         self, *, system_prompt: str, user_text: str
-    ) -> tuple[ExtractedJobLLM, LLMUsage]:
+    ) -> tuple[RiskAssessment, LLMUsage]:
         return await call_openai_compatible_json(
             self._http_client,
             base_url=self._base_url,
@@ -120,13 +101,13 @@ class OpenAICompatibleJobExtractionBackend:
             model=self._model,
             system_prompt=system_prompt,
             user_text=user_text,
-            output_type=ExtractedJobLLM,
+            output_type=RiskAssessment,
         )
 
 
-def build_job_extraction_backend(
+def build_risk_assessment_backend(
     settings: "Settings", *, http_client: httpx.AsyncClient
-) -> JobExtractionBackend:
+) -> RiskAssessmentBackend:
     """Choisit l'implementation selon `settings.llm_provider` (defaut
     'anthropic', jamais change automatiquement)."""
 
@@ -135,41 +116,41 @@ def build_job_extraction_backend(
             raise RuntimeError(
                 "OPENAI_API_KEY est requis quand LLM_PROVIDER=openai_compatible"
             )
-        return OpenAICompatibleJobExtractionBackend(
+        return OpenAICompatibleRiskAssessmentBackend(
             model=settings.llm_model,
             base_url=settings.openai_base_url,
             api_key=settings.openai_api_key,
             http_client=http_client,
         )
-    return AnthropicJobExtractionBackend(model=settings.llm_model)
+    return AnthropicRiskAssessmentBackend(model=settings.llm_model)
 
 
-async def extract_job_structured(
+async def assess_risk_structured(
     db: AsyncSession,
     *,
-    backend: JobExtractionBackend,
+    backend: RiskAssessmentBackend,
     content_hash: str,
     prompt_version: str,
     system_prompt: str,
     user_text: str,
     model: str,
     max_retries: int = 2,
-) -> ExtractedJobLLM:
-    """Extrait une offre structuree, en passant par le cache (content_hash +
-    prompt_version + purpose) et en journalisant chaque tentative dans
-    llm_calls. Retente jusqu'a `max_retries` fois si la sortie est invalide."""
+) -> RiskAssessment:
+    """Meme logique de cache/retry/cout que extract_job_structured (phase 3),
+    dupliquee ici volontairement plutot que generalisee : les deux fonctions
+    restent independantes et ne risquent pas de se casser mutuellement."""
 
     cached = await db.scalar(
         select(LLMExtractionCache).where(
             LLMExtractionCache.content_hash == content_hash,
             LLMExtractionCache.prompt_version == prompt_version,
-            LLMExtractionCache.purpose == PURPOSE_EXTRACT_JOB,
+            LLMExtractionCache.purpose == PURPOSE_DETECT_SCAM,
         )
     )
     if cached is not None:
         db.add(
             LLMCall(
-                purpose=PURPOSE_EXTRACT_JOB,
+                purpose=PURPOSE_DETECT_SCAM,
                 model=cached.model,
                 prompt_version=prompt_version,
                 input_tokens=0,
@@ -180,17 +161,17 @@ async def extract_job_structured(
             )
         )
         await db.flush()
-        log.info("llm_cache_hit", content_hash=content_hash, prompt_version=prompt_version)
-        return ExtractedJobLLM.model_validate(cached.response_json)
+        log.info("risk_cache_hit", content_hash=content_hash, prompt_version=prompt_version)
+        return RiskAssessment.model_validate(cached.response_json)
 
     last_error: Exception | None = None
     for attempt in range(1, max_retries + 2):
         try:
-            parsed, usage = await backend.extract(system_prompt=system_prompt, user_text=user_text)
+            parsed, usage = await backend.assess(system_prompt=system_prompt, user_text=user_text)
         except ExtractionValidationError as exc:
             last_error = exc
             log.warning(
-                "llm_extraction_attempt_failed",
+                "risk_assessment_attempt_failed",
                 attempt=attempt,
                 content_hash=content_hash,
                 error=str(exc),
@@ -199,7 +180,7 @@ async def extract_job_structured(
 
         db.add(
             LLMCall(
-                purpose=PURPOSE_EXTRACT_JOB,
+                purpose=PURPOSE_DETECT_SCAM,
                 model=model,
                 prompt_version=prompt_version,
                 input_tokens=usage.input_tokens,
@@ -214,7 +195,7 @@ async def extract_job_structured(
             .values(
                 content_hash=content_hash,
                 prompt_version=prompt_version,
-                purpose=PURPOSE_EXTRACT_JOB,
+                purpose=PURPOSE_DETECT_SCAM,
                 response_json=parsed.model_dump(mode="json"),
                 model=model,
             )

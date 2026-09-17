@@ -7,6 +7,12 @@ from pydantic import BaseModel, ConfigDict
 from app.models.job import ContractType, JobStatus, RatePeriod, RemoteType, SeniorityLevel
 
 
+class RiskReasonRead(BaseModel):
+    code: str
+    label: str
+    severity: str
+
+
 class JobRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -36,6 +42,9 @@ class JobRead(BaseModel):
     last_seen_at: datetime
     status: JobStatus
     quality_score: int
+    risk_score: int
+    risk_reasons: list[RiskReasonRead]
+    risk_assessed_at: datetime | None
 
 
 class JobDetailRead(JobRead):
@@ -61,3 +70,8 @@ class BackfillResponse(BaseModel):
 
 class MarkExpiredResponse(BaseModel):
     expired: int
+
+
+class RiskBatchResponse(BaseModel):
+    assessed: int
+    failed: int

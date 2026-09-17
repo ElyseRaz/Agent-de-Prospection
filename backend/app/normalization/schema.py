@@ -17,6 +17,7 @@ class ExtractedJobLLM(BaseModel):
 
     title: str | None = None
     company_name: str | None = None
+    company_domain: str | None = None
     contract_type: Literal["freelance", "cdi", "mission"] | None = None
     rate: ExtractedRate | None = None
     duration_months: float | None = None

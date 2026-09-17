@@ -13,6 +13,8 @@ from app.core.security import InvalidTokenError, TokenType, decode_token
 from app.embeddings.base import EmbeddingBackend
 from app.models.user import User, UserRole
 from app.normalization.llm_extraction import JobExtractionBackend
+from app.normalization.risk_extraction import RiskAssessmentBackend
+from app.reputation.base import ReputationProvider
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -41,6 +43,14 @@ def get_llm_backend(request: Request) -> JobExtractionBackend:
 
 def get_embedding_backend(request: Request) -> EmbeddingBackend:
     return request.app.state.embedding_backend
+
+
+def get_risk_backend(request: Request) -> RiskAssessmentBackend:
+    return request.app.state.risk_backend
+
+
+def get_reputation_provider(request: Request) -> ReputationProvider | None:
+    return request.app.state.reputation_provider
 
 
 async def get_current_user(

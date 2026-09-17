@@ -18,7 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import TSVECTOR, UUID
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -147,6 +147,13 @@ class Job(Base):
     )
     search_tsv: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
     dedup_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+
+    # Phase 5 : score de risque / anti-arnaque.
+    risk_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    risk_reasons: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
+    risk_assessed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     skills: Mapped[list["JobSkill"]] = relationship(
         back_populates="job", cascade="all, delete-orphan"

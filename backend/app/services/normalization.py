@@ -88,7 +88,9 @@ async def normalize_raw_document(
 
     company = None
     if extracted.company_name:
-        company = await get_or_create_company(db, name=extracted.company_name)
+        company = await get_or_create_company(
+            db, name=extracted.company_name, domain=extracted.company_domain
+        )
 
     rate_min, rate_max, rate_currency, rate_period, rate_eur_normalized = await _normalize_rate(
         extracted, http_client=http_client

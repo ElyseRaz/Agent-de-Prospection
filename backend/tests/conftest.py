@@ -54,7 +54,9 @@ async def _clean_tables(engine_and_session):
     async with session_factory() as session:
         await session.execute(
             sa.text(
-                "TRUNCATE TABLE job_duplicate_links, job_skills, jobs, companies, skills, "
+                "TRUNCATE TABLE match_feedback, matches, profile_skills, profiles, "
+                "job_duplicate_links, job_skills, jobs, "
+                "company_reputation, companies, skills, blacklist, "
                 "llm_extraction_cache, llm_calls, "
                 "raw_documents, scrape_runs, sources, users CASCADE"
             )
@@ -174,3 +176,54 @@ class FakeEmbeddingBackend:
             return self._vectors[text]
         seed = (sum(ord(c) for c in text) % (EMBEDDING_TEST_DIMENSION // 2)) or 1
         return cosine_test_vector(seed)
+
+
+class FakeRiskAssessmentBackend:
+    """Double de test pour RiskAssessmentBackend : ne fait aucun appel reseau.
+
+    `responses` est consomme dans l'ordre a chaque appel de `assess()` ; une
+    entree `Exception` est levee (utile pour tester le retry)."""
+
+    def __init__(self, responses: list) -> None:
+        from app.normalization.llm_extraction import LLMUsage
+
+        self._responses = list(responses)
+        self._llm_usage_cls = LLMUsage
+        self.calls = 0
+
+    async def assess(self, *, system_prompt: str, user_text: str):
+        self.calls += 1
+        if not self._responses:
+            raise AssertionError("FakeRiskAssessmentBackend: plus de reponses disponibles")
+        item = self._responses.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item, self._llm_usage_cls(input_tokens=80, output_tokens=40, cost_usd=0.0004)
+
+
+def make_risk_assessment(**overrides):
+    from app.normalization.risk_schema import RiskAssessment
+
+    defaults = dict(risk_score=10, reasons=[])
+    defaults.update(overrides)
+    return RiskAssessment(**defaults)
+
+
+class FakeReputationProvider:
+    """Double de test pour ReputationProvider : aucun appel reseau.
+
+    `results` associe un domaine exact a un ReputationResult (ou None pour
+    'recherche et non trouve', ou une Exception pour simuler une panne)."""
+
+    def __init__(self, results: dict[str, object] | None = None) -> None:
+        self._results = results or {}
+        self.calls: list[str] = []
+
+    async def fetch_by_domain(self, domain: str):
+        self.calls.append(domain)
+        if domain not in self._results:
+            return None
+        item = self._results[domain]
+        if isinstance(item, Exception):
+            raise item
+        return item

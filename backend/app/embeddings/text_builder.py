@@ -13,3 +13,14 @@ def build_embedding_text(
     if description_clean:
         parts.append(description_clean[:2000])
     return "\n".join(parts)
+
+
+def build_profile_embedding_text(*, name: str, skill_labels: list[str]) -> str:
+    """Meme principe que build_embedding_text, cote profil freelance : nom du
+    profil + competences declarees, pour comparer semantiquement au meme
+    espace vectoriel que les offres (meme modele d'embedding)."""
+
+    parts: list[str] = [name]
+    if skill_labels:
+        parts.append("Competences : " + ", ".join(skill_labels))
+    return "\n".join(parts)

@@ -41,8 +41,40 @@ fusion via `canonical_id` + `job_duplicate_links`), détection d'expiration basi
 (`last_seen_at`), endpoints `POST /jobs/backfill-embeddings` (ré-embedde sans
 réappeler le LLM) et `POST /jobs/mark-expired`.
 
-Les phases suivantes (enrichissement entreprise/Trustpilot, matching, frontend complet,
-alertes, admin) ne sont pas encore implémentées — voir la section Roadmap.
+**Phase 5 — Réputation, score de risque, liste noire** : réputation Trustpilot (API
+Business Units **publique**, résolution par domaine uniquement — voir limitation
+ci-dessous), score de risque 0-100 avec raisons lisibles combinant signaux déterministes
+(TJM vs médiane du marché par séniorité, réputation, doublons multi-entreprises via la
+phase 4) et jugement LLM sur le texte (codes `NO_BUDGET`, `UNDERPAID`, `UPFRONT_PAYMENT`,
+`UNPAID_TEST`, `PERSONAL_CONTACT_ONLY`, `VAGUE_SCOPE`, `COMPANY_NOT_FOUND`,
+`BAD_REPUTATION`, `DUPLICATE_SPAM`), liste noire d'entreprises/recruteurs (entrées
+partagées ou personnelles), endpoints `POST /jobs/assess-risk` (admin) et
+`GET/POST /blacklist`. Prompt versionné `detect_scam_v1.md`.
+
+**Limitation assumée (Trustpilot)** : l'API publique ne propose pas de recherche par nom
+d'entreprise en texte libre, seulement par domaine exact (`GET /business-units/find?name=
+<domaine>`). Le domaine n'est connu que si le LLM le détecte explicitement dans le texte
+de l'annonce (rare) — la couverture réelle de la vérification de réputation sera donc
+faible en pratique. Le score de risque reste utile sans elle (TJM, doublons, signaux
+textuels).
+
+**Phase 6 — Profils, matching, explication du score** : profils freelance multi-profils
+par utilisateur (`profiles`/`profile_skills`, TJM cible/plancher, fuseau, langues,
+compétences avec niveau), moteur de score de compatibilité 0-100 sur 5 critères pondérés
+(similarité sémantique, couverture des compétences requises, TJM vs cible/plancher,
+fuseau horaire, fiabilité via `risk_score`), explication lisible par critère
+(`{criterion, points, label}`), mise en cache dans `matches`, apprentissage implicite des
+poids à partir des offres sauvegardées/rejetées (`match_feedback`, dès 3 signaux de
+chaque côté). Endpoints CRUD `/profiles`, `PUT /profiles/{id}/skills`,
+`GET /profiles/{id}/matches`, `POST /profiles/{id}/matches/{job_id}/feedback`.
+
+**Fournisseur LLM configurable** (ajouté en cours de phase 6, à la demande) : extraction
+(phase 3) et score de risque (phase 5) peuvent basculer d'Anthropic vers une passerelle
+tierce compatible OpenAI (`LLM_PROVIDER=openai_compatible`, appelée en HTTP direct — voir
+§ IA & coûts). Anthropic reste le défaut, rien ne change sans action explicite.
+
+Les phases suivantes (frontend complet, alertes, admin) ne sont pas encore implémentées —
+voir la section Roadmap.
 
 ## Démarrage en une commande
 
@@ -152,6 +184,39 @@ Comme pour le LLM, l'embedding est testé via un backend injectable
 (`EmbeddingBackend` Protocol, `FakeEmbeddingBackend` dans `conftest.py`) : aucun test
 ne charge le modèle `sentence-transformers` réel.
 
+Les tests de réputation/risque/liste noire couvrent :
+- `test_reputation.py` — parsing des champs Trustpilot confirmés (`score.trustScore`,
+  `numberOfReviews.total`), repli sur l'endpoint détail si absents de `/find`, 404 →
+  `None`, erreur serveur → `ReputationLookupError` (jamais confondue avec "non trouvé"),
+  **cache 30 jours** (pas de second appel avant expiration), ancienne valeur conservée
+  en cas de panne transitoire ;
+- `test_risk_service.py` — signaux déterministes (médiane de TJM par séniorité, comptage
+  d'entreprises distinctes dans un cluster de doublons, détection blacklist), **court-
+  circuit sur liste noire** (aucun appel LLM), appel LLM + cache sur le chemin normal,
+  traitement par lot ne réévaluant pas deux fois le même job ;
+- `test_blacklist.py` — normalisation des valeurs (cohérente avec la résolution
+  d'entreprise), entrées personnelles invisibles des autres utilisateurs, RBAC sur les
+  entrées partagées (admin uniquement).
+
+Le backend Trustpilot et le backend LLM de risque sont tous deux injectables : aucun
+test n'appelle Trustpilot ni Anthropic réellement.
+
+Les tests de matching couvrent :
+- `test_matching_service.py` — chaque axe de score isolément (sémantique via vecteurs de
+  test à similarité cosinus contrôlée, couverture de compétences, TJM au-dessus/dans la
+  fourchette/**sous le plancher négatif**, fuseau avec/sans contrainte, fiabilité selon
+  le risque), scoring bout-en-bout avec persistance dans `matches`, **apprentissage des
+  poids** déclenché seulement au-dessus du seuil d'échantillon (3+3) et pas avant,
+  poids toujours renormalisés à 100 ;
+- `test_profiles_api.py` — CRUD avec propriété (un utilisateur ne voit/modifie jamais le
+  profil d'un autre), recalcul de l'embedding à la mise à jour des compétences, endpoint
+  matches, feedback.
+
+Les tests du fournisseur LLM alternatif couvrent :
+- `test_openai_compatible.py` — parsing réel via `httpx.MockTransport` (contrat REST
+  "chat completions" standard), erreurs HTTP/JSON invalide/schéma incompatible, coût à
+  0$ quand aucun tarif n'est connu pour le modèle.
+
 ## Architecture (cible, voir Roadmap pour l'état d'implémentation)
 
 Architecture hexagonale en 4 couches :
@@ -181,8 +246,8 @@ Architecture hexagonale en 4 couches :
 | 2 | `SourceConnector` + connecteur Remotive + `raw_documents` | ✅ |
 | 3 | Pipeline de normalisation LLM + validation Pydantic + cache | ✅ |
 | 4 | Embeddings, déduplication, recherche hybride | ✅ |
-| 5 | Enrichissement entreprise + Trustpilot + score de risque | ⏳ |
-| 6 | Profils, moteur de matching, explication du score | ⏳ |
+| 5 | Enrichissement entreprise + Trustpilot + score de risque | ✅ |
+| 6 | Profils, moteur de matching, explication du score | ✅ |
 | 7 | Frontend React complet (dashboard, liste, fiche, kanban, analytics) | ⏳ |
 | 8 | Alertes, notifications, admin, observabilité, CI, durcissement | ⏳ |
 
@@ -203,6 +268,22 @@ Architecture hexagonale en 4 couches :
   768 dimensions), pré-téléchargé au build de l'image Docker (`backend/Dockerfile`) —
   aucune clé API, aucun coût récurrent, aucun appel réseau à l'exécution. Contrepartie
   assumée : image `api`/`worker` plus lourde (~1-2 Go de plus) et build plus long.
+- Score de risque (phase 5) : **2e appel LLM payant**, distinct de l'extraction (phase 3).
+  Jamais déclenché automatiquement par la normalisation — action explicite
+  (`POST /jobs/assess-risk` ou tâche Celery `risk.assess_pending`) pour garder le
+  contrôle du coût. Même mécanisme de cache/retry/journalisation que l'extraction
+  (`purpose="detect_scam"` dans `llm_calls`/`llm_extraction_cache`).
+- **Fournisseur LLM alternatif** (`LLM_PROVIDER=openai_compatible`) : passerelle tierce
+  compatible OpenAI (ex: `opencode.ai`), appelée en HTTP direct (`POST {base}/chat/completions`,
+  mode JSON) plutôt que via un SDK tiers — même raisonnement que pour Frankfurter/Trustpilot :
+  s'appuyer sur le contrat REST documenté plutôt que sur les internals non vérifiés d'un
+  SDK. **Aucun tarif public connu** pour un modèle exposé par une passerelle tierce
+  personnalisée (ex. un alias propre à cette passerelle) : le coût journalisé sera **0$**
+  tant que `PRICING_USD_PER_MTOK` (`backend/app/normalization/llm_common.py`) n'est pas
+  complété manuellement avec le tarif réel. Le score de compatibilité structurée
+  (schéma respecté) n'a pas la même garantie native que Structured Outputs côté
+  Anthropic — repose sur le mode JSON générique + validation Pydantic + retry déjà en
+  place. Défaut inchangé (`anthropic`) : bascule uniquement sur action explicite.
 
 ## Sécurité et conformité
 

@@ -35,12 +35,24 @@ class Settings(BaseSettings):
     celery_broker_url: str | None = None
     celery_result_backend: str | None = None
 
-    # LLM (extraction structuree, phase 3). La cle API est lue directement par
-    # le SDK Anthropic depuis ANTHROPIC_API_KEY, jamais stockee ici.
+    # LLM (extraction structuree phase 3, score de risque phase 5).
+    # 'anthropic' (defaut) : cle lue directement par le SDK depuis
+    # ANTHROPIC_API_KEY, jamais stockee ici. 'openai_compatible' : passerelle
+    # tierce compatible OpenAI (ex: opencode.ai) appelee en HTTP direct - voir
+    # app/normalization/openai_compatible.py. Le changement de fournisseur
+    # n'est jamais automatique : il faut positionner LLM_PROVIDER explicitement.
+    llm_provider: Literal["anthropic", "openai_compatible"] = "anthropic"
     llm_model: str = "claude-sonnet-5"
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_api_key: str | None = None
 
     # Embeddings (phase 4). Modele local sentence-transformers, aucune cle API.
     embedding_model_name: str = "paraphrase-multilingual-mpnet-base-v2"
+
+    # Reputation (phase 5). Pas de SDK officiel : la cle est lue via Settings
+    # (contrairement a Anthropic) et injectee explicitement dans le client HTTP.
+    # Optionnelle : sans elle, la verification Trustpilot est simplement sautee.
+    trustpilot_api_key: str | None = None
 
     @property
     def sync_database_url(self) -> str:

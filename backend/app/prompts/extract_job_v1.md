@@ -15,6 +15,10 @@ Retourne uniquement les champs structures demandes par le schema fourni. Regles 
   "chevauchement 4h avec Europe").
 - `contract_type` appartient a `{freelance, cdi, mission}` uniquement si explicitement
   determinable depuis le texte, sinon `null`.
+- `company_domain` : uniquement si le texte mentionne explicitement le site web de
+  l'entreprise (ex: "https://acme.com", "visitez acme.com"). Ne devine jamais un domaine
+  a partir du nom de l'entreprise. Retourne juste le nom de domaine (ex: "acme.com"),
+  sans "https://" ni "www.". Si non mentionne, `null`.
 - `seniority` appartient a `{junior, intermediate, senior, lead, expert}` uniquement si
   explicitement determinable, sinon `null`.
 - `tech_stack` et `required_languages` sont des listes de chaines courtes (technologies,

@@ -6,10 +6,21 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, get_embedding_backend, require_role
+from app.api.deps import (
+    get_current_user,
+    get_db,
+    get_embedding_backend,
+    get_reputation_provider,
+    get_risk_backend,
+    get_settings,
+    require_role,
+)
+from app.core.config import Settings
 from app.embeddings.base import EmbeddingBackend
 from app.models.job import ContractType, Job, JobStatus, RemoteType, SeniorityLevel
 from app.models.user import User, UserRole
+from app.normalization.risk_extraction import RiskAssessmentBackend
+from app.reputation.base import ReputationProvider
 from app.schemas.job import (
     BackfillResponse,
     JobDetailRead,
@@ -17,9 +28,11 @@ from app.schemas.job import (
     JobSearchResponse,
     JobSearchResultRead,
     MarkExpiredResponse,
+    RiskBatchResponse,
 )
 from app.services.backfill import backfill_embeddings_and_dedup
 from app.services.expiry import mark_expired_jobs
+from app.services.risk import assess_pending_jobs_risk
 from app.services.search import JobSearchFilters, hybrid_search_jobs
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -98,6 +111,27 @@ async def mark_expired(
 ) -> MarkExpiredResponse:
     count = await mark_expired_jobs(db)
     return MarkExpiredResponse(expired=count)
+
+
+@router.post("/assess-risk", response_model=RiskBatchResponse)
+async def assess_risk(
+    limit: int = Query(default=100, ge=1, le=1000),
+    force: bool = Query(default=False),
+    db: AsyncSession = Depends(get_db),
+    risk_backend: RiskAssessmentBackend = Depends(get_risk_backend),
+    reputation_provider: ReputationProvider | None = Depends(get_reputation_provider),
+    settings: Settings = Depends(get_settings),
+    _: User = Depends(require_role(UserRole.ADMIN)),
+) -> RiskBatchResponse:
+    summary = await assess_pending_jobs_risk(
+        db,
+        backend=risk_backend,
+        model=settings.llm_model,
+        reputation_provider=reputation_provider,
+        limit=limit,
+        force=force,
+    )
+    return RiskBatchResponse(assessed=summary.assessed, failed=summary.failed)
 
 
 @router.get("/{job_id}", response_model=JobDetailRead)

@@ -11,13 +11,18 @@ from app.collectors.registry import discover_connectors
 from app.core.config import get_settings
 from app.core.db import create_engine_and_session
 from app.embeddings.sentence_transformer_backend import SentenceTransformerEmbeddingBackend
+from app.models.profile import Profile
 from app.models.source import Source
-from app.normalization.llm_extraction import AnthropicJobExtractionBackend
+from app.normalization.llm_extraction import build_job_extraction_backend
 from app.normalization.raw_text.registry import discover_raw_text_extractors
+from app.normalization.risk_extraction import build_risk_assessment_backend
+from app.reputation.trustpilot import TrustpilotReputationProvider
 from app.services.backfill import backfill_embeddings_and_dedup
 from app.services.collection import DryRunResult, run_collection
 from app.services.expiry import mark_expired_jobs
+from app.services.matching import compute_top_matches
 from app.services.normalization import normalize_pending_documents
+from app.services.risk import assess_pending_jobs_risk
 
 settings = get_settings()
 log = structlog.get_logger(__name__)
@@ -76,6 +81,23 @@ def mark_expired_jobs_task(stale_days: int = 14) -> dict:
     return asyncio.run(_mark_expired_jobs_async(stale_days))
 
 
+@celery_app.task(name="risk.assess_pending")
+def assess_pending_risk_task(limit: int = 100, force: bool = False) -> dict:
+    """Evalue le score de risque des jobs actifs pas encore evalues (ou tous
+    si `force=True`). Appel LLM payant : jamais declenche automatiquement par
+    la normalisation, action explicite (voir README - IA & couts)."""
+    return asyncio.run(_assess_pending_risk_async(limit, force))
+
+
+@celery_app.task(name="matching.refresh_profile_matches")
+def refresh_profile_matches_task(limit_per_profile: int = 20) -> dict:
+    """Recalcule le top matches de tous les profils (aucun cout LLM : le
+    scoring n'utilise que les embeddings locaux et des donnees deja en base).
+    Utile pour tenir `matches` a jour independamment d'un appel API (ex: futur
+    digest quotidien, phase 8)."""
+    return asyncio.run(_refresh_profile_matches_async(limit_per_profile))
+
+
 async def _collect_source_async(source_slug: str, dry_run: bool) -> dict:
     engine, session_factory = create_engine_and_session(settings)
     redis_client = redis_asyncio.from_url(settings.redis_url, decode_responses=True)
@@ -111,9 +133,9 @@ async def _collect_source_async(source_slug: str, dry_run: bool) -> dict:
 
 async def _normalize_pending_async(limit: int, source_slug: str | None) -> dict:
     engine, session_factory = create_engine_and_session(settings)
-    backend = AnthropicJobExtractionBackend(model=settings.llm_model)
 
     async with httpx.AsyncClient(timeout=20.0) as http_client:
+        backend = build_job_extraction_backend(settings, http_client=http_client)
         try:
             async with session_factory() as db:
                 source_id = None
@@ -160,5 +182,46 @@ async def _mark_expired_jobs_async(stale_days: int) -> dict:
         async with session_factory() as db:
             count = await mark_expired_jobs(db, stale_days=stale_days)
         return {"expired": count}
+    finally:
+        await engine.dispose()
+
+
+async def _assess_pending_risk_async(limit: int, force: bool) -> dict:
+    engine, session_factory = create_engine_and_session(settings)
+
+    async with httpx.AsyncClient(timeout=20.0) as http_client:
+        risk_backend = build_risk_assessment_backend(settings, http_client=http_client)
+        reputation_provider = (
+            TrustpilotReputationProvider(
+                api_key=settings.trustpilot_api_key, http_client=http_client
+            )
+            if settings.trustpilot_api_key
+            else None
+        )
+        try:
+            async with session_factory() as db:
+                summary = await assess_pending_jobs_risk(
+                    db,
+                    backend=risk_backend,
+                    model=settings.llm_model,
+                    reputation_provider=reputation_provider,
+                    limit=limit,
+                    force=force,
+                )
+            return {"assessed": summary.assessed, "failed": summary.failed}
+        finally:
+            await engine.dispose()
+
+
+async def _refresh_profile_matches_async(limit_per_profile: int) -> dict:
+    engine, session_factory = create_engine_and_session(settings)
+    try:
+        async with session_factory() as db:
+            profiles = (await db.execute(select(Profile))).scalars().all()
+            refreshed = 0
+            for profile in profiles:
+                await compute_top_matches(db, profile, limit=limit_per_profile)
+                refreshed += 1
+        return {"profiles_refreshed": refreshed}
     finally:
         await engine.dispose()
