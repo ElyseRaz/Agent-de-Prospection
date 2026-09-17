@@ -19,6 +19,12 @@ export interface Company {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  trustpilot_rating: number | null;
+  trustpilot_review_count: number | null;
+  trustpilot_fetched_at: string | null;
+  ai_needs: string[];
+  ai_summary: string | null;
+  ai_analyzed_at: string | null;
 }
 
 export interface CompanyDetail extends Company {
@@ -100,4 +106,19 @@ export function deleteContact(companyId: string, contactId: string): Promise<voi
 
 export function importProspects(file: File): Promise<ImportResponse> {
   return apiUpload<ImportResponse>("/prospects/import", file);
+}
+
+export function enrichProspect(id: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/prospects/${id}/enrich`, { method: "POST" });
+}
+
+export interface SettingsStatus {
+  trustpilot_configured: boolean;
+  groq_configured: boolean;
+  smtp_configured: boolean;
+  daily_send_limit: number;
+}
+
+export function getSettingsStatus(): Promise<SettingsStatus> {
+  return apiFetch<SettingsStatus>("/settings/status");
 }

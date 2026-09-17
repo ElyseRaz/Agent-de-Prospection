@@ -22,6 +22,25 @@ type Config struct {
 	RefreshTokenExpiry time.Duration
 
 	CORSOrigins []string
+
+	// Enrichissement (phase 3). Chaque fournisseur est independant et
+	// optionnel : absent, il est simplement saute (voir internal/reputation
+	// et internal/ai), jamais une erreur au demarrage.
+	TrustpilotAPIKey string
+	GroqAPIKey       string
+	GroqBaseURL      string
+	GroqModel        string
+
+	// Campagnes email (phase 4). SMTP est optionnel comme les fournisseurs
+	// d'enrichissement : absent, l'envoi de campagne echoue proprement avec
+	// un message clair plutot que de planter au demarrage.
+	SMTPHost       string
+	SMTPPort       int
+	SMTPUser       string
+	SMTPPassword   string
+	SMTPFrom       string
+	DailySendLimit int
+	PublicAppURL   string
 }
 
 func Load() (Config, error) {
@@ -47,6 +66,17 @@ func Load() (Config, error) {
 		AccessTokenExpiry:  time.Duration(accessMinutes) * time.Minute,
 		RefreshTokenExpiry: time.Duration(refreshDays) * 24 * time.Hour,
 		CORSOrigins:        splitCSV(getEnv("CORS_ORIGINS", "http://localhost:3000")),
+		TrustpilotAPIKey:   os.Getenv("TRUSTPILOT_API_KEY"),
+		GroqAPIKey:         os.Getenv("GROQ_API_KEY"),
+		GroqBaseURL:        getEnv("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
+		GroqModel:          getEnv("GROQ_MODEL", "openai/gpt-oss-20b"),
+		SMTPHost:           os.Getenv("SMTP_HOST"),
+		SMTPPort:           getEnvInt("SMTP_PORT", 587),
+		SMTPUser:           os.Getenv("SMTP_USER"),
+		SMTPPassword:       os.Getenv("SMTP_PASSWORD"),
+		SMTPFrom:           os.Getenv("SMTP_FROM"),
+		DailySendLimit:     getEnvInt("DAILY_SEND_LIMIT", 100),
+		PublicAppURL:       getEnv("PUBLIC_APP_URL", "http://localhost"),
 	}, nil
 }
 

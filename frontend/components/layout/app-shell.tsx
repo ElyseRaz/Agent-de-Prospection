@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
+  Kanban,
   Mail,
   Settings,
   LogOut,
@@ -23,6 +24,7 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   { href: "/", label: "Tableau de bord", icon: LayoutDashboard },
   { href: "/prospects", label: "Prospects", icon: Users },
+  { href: "/pipeline", label: "Suivi", icon: Kanban },
   { href: "/campaigns", label: "Campagnes", icon: Mail },
   { href: "/settings", label: "Parametres", icon: Settings },
 ];

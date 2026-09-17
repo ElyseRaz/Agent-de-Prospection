@@ -4,7 +4,9 @@ import {
   createProspect,
   deleteContact,
   deleteProspect,
+  enrichProspect,
   getProspect,
+  getSettingsStatus,
   importProspects,
   listProspects,
   updateProspect,
@@ -24,11 +26,15 @@ export function useProspects(filters: ListProspectsFilters) {
   });
 }
 
-export function useProspect(id: string | null) {
+export function useProspect(id: string | null, options: { poll?: boolean } = {}) {
   return useQuery({
     queryKey: prospectKey(id ?? ""),
     queryFn: () => getProspect(id as string),
     enabled: Boolean(id),
+    // Pendant l'enrichissement (job Asynq asynchrone), on reinterroge la
+    // fiche toutes les 2s le temps que le worker la mette a jour - arrete
+    // des que l'appelant repasse `poll` a false (voir prospect-detail-dialog).
+    refetchInterval: options.poll ? 2000 : false,
   });
 }
 
@@ -80,5 +86,19 @@ export function useImportProspects() {
   return useMutation({
     mutationFn: (file: File) => importProspects(file),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["prospects"] }),
+  });
+}
+
+export function useEnrichProspect(id: string) {
+  return useMutation({
+    mutationFn: () => enrichProspect(id),
+  });
+}
+
+export function useSettingsStatus() {
+  return useQuery({
+    queryKey: ["settings", "status"],
+    queryFn: getSettingsStatus,
+    staleTime: 60_000,
   });
 }

@@ -1,6 +1,7 @@
 package prospects
 
 import (
+	"encoding/json"
 	"time"
 
 	"leadpilot/internal/auth"
@@ -16,26 +17,46 @@ var validStatuses = map[string]bool{
 }
 
 type companyResponse struct {
-	ID         string  `json:"id"`
-	Name       string  `json:"name"`
-	Domain     *string `json:"domain"`
-	WebsiteURL *string `json:"website_url"`
-	Status     string  `json:"status"`
-	Notes      *string `json:"notes"`
-	CreatedAt  string  `json:"created_at"`
-	UpdatedAt  string  `json:"updated_at"`
+	ID                    string   `json:"id"`
+	Name                  string   `json:"name"`
+	Domain                *string  `json:"domain"`
+	WebsiteURL            *string  `json:"website_url"`
+	Status                string   `json:"status"`
+	Notes                 *string  `json:"notes"`
+	CreatedAt             string   `json:"created_at"`
+	UpdatedAt             string   `json:"updated_at"`
+	TrustpilotRating      *float32 `json:"trustpilot_rating"`
+	TrustpilotReviewCount *int32   `json:"trustpilot_review_count"`
+	TrustpilotFetchedAt   *string  `json:"trustpilot_fetched_at"`
+	AINeeds               []string `json:"ai_needs"`
+	AISummary             *string  `json:"ai_summary"`
+	AIAnalyzedAt          *string  `json:"ai_analyzed_at"`
 }
 
 func toCompanyResponse(c sqlc.Company) companyResponse {
+	var needs []string
+	if len(c.AiNeeds) > 0 {
+		_ = json.Unmarshal(c.AiNeeds, &needs)
+	}
+	if needs == nil {
+		needs = []string{}
+	}
+
 	return companyResponse{
-		ID:         auth.FromPgUUID(c.ID).String(),
-		Name:       c.Name,
-		Domain:     textPtr(c.Domain),
-		WebsiteURL: textPtr(c.WebsiteUrl),
-		Status:     string(c.Status),
-		Notes:      textPtr(c.Notes),
-		CreatedAt:  c.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:  c.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                    auth.FromPgUUID(c.ID).String(),
+		Name:                  c.Name,
+		Domain:                textPtr(c.Domain),
+		WebsiteURL:            textPtr(c.WebsiteUrl),
+		Status:                string(c.Status),
+		Notes:                 textPtr(c.Notes),
+		CreatedAt:             c.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:             c.UpdatedAt.Time.Format(time.RFC3339),
+		TrustpilotRating:      float4Ptr(c.TrustpilotRating),
+		TrustpilotReviewCount: int4Ptr(c.TrustpilotReviewCount),
+		TrustpilotFetchedAt:   timestamptzPtr(c.TrustpilotFetchedAt),
+		AINeeds:               needs,
+		AISummary:             textPtr(c.AiSummary),
+		AIAnalyzedAt:          timestamptzPtr(c.AiAnalyzedAt),
 	}
 }
 

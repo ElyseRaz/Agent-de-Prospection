@@ -12,19 +12,43 @@ import (
 
 type Querier interface {
 	CountCompaniesByUser(ctx context.Context, userID pgtype.UUID) (int64, error)
+	CountPendingRecipients(ctx context.Context, campaignID pgtype.UUID) (int64, error)
+	CountRecipientsByStatus(ctx context.Context, campaignID pgtype.UUID) ([]CountRecipientsByStatusRow, error)
+	CountSentToday(ctx context.Context, userID pgtype.UUID) (int64, error)
+	CreateCampaign(ctx context.Context, arg CreateCampaignParams) (Campaign, error)
+	CreateCampaignRecipient(ctx context.Context, arg CreateCampaignRecipientParams) (CampaignRecipient, error)
 	CreateCompany(ctx context.Context, arg CreateCompanyParams) (Company, error)
 	CreateContact(ctx context.Context, arg CreateContactParams) (Contact, error)
+	CreateTemplate(ctx context.Context, arg CreateTemplateParams) (EmailTemplate, error)
+	CreateUnsubscribe(ctx context.Context, email string) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteCampaign(ctx context.Context, id pgtype.UUID) error
 	DeleteCompany(ctx context.Context, id pgtype.UUID) error
 	DeleteContact(ctx context.Context, id pgtype.UUID) error
+	DeleteTemplate(ctx context.Context, id pgtype.UUID) error
+	GetCampaignByID(ctx context.Context, id pgtype.UUID) (Campaign, error)
+	GetCampaignRecipientByID(ctx context.Context, id pgtype.UUID) (CampaignRecipient, error)
 	GetCompanyByID(ctx context.Context, id pgtype.UUID) (Company, error)
 	GetContactByID(ctx context.Context, id pgtype.UUID) (Contact, error)
+	GetTemplateByID(ctx context.Context, id pgtype.UUID) (EmailTemplate, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
+	IsUnsubscribed(ctx context.Context, email string) (bool, error)
+	ListCampaignRecipients(ctx context.Context, campaignID pgtype.UUID) ([]ListCampaignRecipientsRow, error)
+	ListCampaignsByUser(ctx context.Context, userID pgtype.UUID) ([]Campaign, error)
 	ListCompaniesByUser(ctx context.Context, arg ListCompaniesByUserParams) ([]Company, error)
 	ListContactsByCompany(ctx context.Context, companyID pgtype.UUID) ([]Contact, error)
+	ListPendingRecipients(ctx context.Context, campaignID pgtype.UUID) ([]ListPendingRecipientsRow, error)
+	ListTemplatesByUser(ctx context.Context, userID pgtype.UUID) ([]EmailTemplate, error)
 	ListUsers(ctx context.Context) ([]User, error)
+	MarkCampaignSent(ctx context.Context, id pgtype.UUID) (Campaign, error)
+	MarkRecipientFailed(ctx context.Context, arg MarkRecipientFailedParams) error
+	MarkRecipientSent(ctx context.Context, id pgtype.UUID) error
+	MarkRecipientUnsubscribed(ctx context.Context, id pgtype.UUID) error
+	SetCampaignStatus(ctx context.Context, arg SetCampaignStatusParams) (Campaign, error)
 	UpdateCompany(ctx context.Context, arg UpdateCompanyParams) (Company, error)
+	UpdateEnrichment(ctx context.Context, arg UpdateEnrichmentParams) (Company, error)
+	UpdateTemplate(ctx context.Context, arg UpdateTemplateParams) (EmailTemplate, error)
 	UpdateUserActive(ctx context.Context, arg UpdateUserActiveParams) (User, error)
 	UpdateUserRole(ctx context.Context, arg UpdateUserRoleParams) (User, error)
 }

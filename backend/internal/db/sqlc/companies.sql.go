@@ -25,7 +25,7 @@ func (q *Queries) CountCompaniesByUser(ctx context.Context, userID pgtype.UUID) 
 const createCompany = `-- name: CreateCompany :one
 INSERT INTO companies (user_id, name, domain, website_url, notes)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, name, domain, website_url, status, notes, created_at, updated_at
+RETURNING id, user_id, name, domain, website_url, status, notes, created_at, updated_at, trustpilot_rating, trustpilot_review_count, trustpilot_fetched_at, ai_needs, ai_summary, ai_analyzed_at
 `
 
 type CreateCompanyParams struct {
@@ -55,6 +55,12 @@ func (q *Queries) CreateCompany(ctx context.Context, arg CreateCompanyParams) (C
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TrustpilotRating,
+		&i.TrustpilotReviewCount,
+		&i.TrustpilotFetchedAt,
+		&i.AiNeeds,
+		&i.AiSummary,
+		&i.AiAnalyzedAt,
 	)
 	return i, err
 }
@@ -69,7 +75,7 @@ func (q *Queries) DeleteCompany(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getCompanyByID = `-- name: GetCompanyByID :one
-SELECT id, user_id, name, domain, website_url, status, notes, created_at, updated_at FROM companies WHERE id = $1
+SELECT id, user_id, name, domain, website_url, status, notes, created_at, updated_at, trustpilot_rating, trustpilot_review_count, trustpilot_fetched_at, ai_needs, ai_summary, ai_analyzed_at FROM companies WHERE id = $1
 `
 
 func (q *Queries) GetCompanyByID(ctx context.Context, id pgtype.UUID) (Company, error) {
@@ -85,12 +91,18 @@ func (q *Queries) GetCompanyByID(ctx context.Context, id pgtype.UUID) (Company, 
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TrustpilotRating,
+		&i.TrustpilotReviewCount,
+		&i.TrustpilotFetchedAt,
+		&i.AiNeeds,
+		&i.AiSummary,
+		&i.AiAnalyzedAt,
 	)
 	return i, err
 }
 
 const listCompaniesByUser = `-- name: ListCompaniesByUser :many
-SELECT id, user_id, name, domain, website_url, status, notes, created_at, updated_at FROM companies
+SELECT id, user_id, name, domain, website_url, status, notes, created_at, updated_at, trustpilot_rating, trustpilot_review_count, trustpilot_fetched_at, ai_needs, ai_summary, ai_analyzed_at FROM companies
 WHERE user_id = $1
   AND ($2::company_status IS NULL OR status = $2)
   AND (
@@ -126,6 +138,12 @@ func (q *Queries) ListCompaniesByUser(ctx context.Context, arg ListCompaniesByUs
 			&i.Notes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TrustpilotRating,
+			&i.TrustpilotReviewCount,
+			&i.TrustpilotFetchedAt,
+			&i.AiNeeds,
+			&i.AiSummary,
+			&i.AiAnalyzedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -147,7 +165,7 @@ SET
     notes = coalesce($5, notes),
     updated_at = now()
 WHERE id = $6
-RETURNING id, user_id, name, domain, website_url, status, notes, created_at, updated_at
+RETURNING id, user_id, name, domain, website_url, status, notes, created_at, updated_at, trustpilot_rating, trustpilot_review_count, trustpilot_fetched_at, ai_needs, ai_summary, ai_analyzed_at
 `
 
 type UpdateCompanyParams struct {
@@ -179,6 +197,67 @@ func (q *Queries) UpdateCompany(ctx context.Context, arg UpdateCompanyParams) (C
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TrustpilotRating,
+		&i.TrustpilotReviewCount,
+		&i.TrustpilotFetchedAt,
+		&i.AiNeeds,
+		&i.AiSummary,
+		&i.AiAnalyzedAt,
+	)
+	return i, err
+}
+
+const updateEnrichment = `-- name: UpdateEnrichment :one
+UPDATE companies
+SET
+    trustpilot_rating = $1,
+    trustpilot_review_count = $2,
+    trustpilot_fetched_at = $3,
+    ai_needs = $4,
+    ai_summary = $5,
+    ai_analyzed_at = $6,
+    updated_at = now()
+WHERE id = $7
+RETURNING id, user_id, name, domain, website_url, status, notes, created_at, updated_at, trustpilot_rating, trustpilot_review_count, trustpilot_fetched_at, ai_needs, ai_summary, ai_analyzed_at
+`
+
+type UpdateEnrichmentParams struct {
+	TrustpilotRating      pgtype.Float4      `json:"trustpilot_rating"`
+	TrustpilotReviewCount pgtype.Int4        `json:"trustpilot_review_count"`
+	TrustpilotFetchedAt   pgtype.Timestamptz `json:"trustpilot_fetched_at"`
+	AiNeeds               []byte             `json:"ai_needs"`
+	AiSummary             pgtype.Text        `json:"ai_summary"`
+	AiAnalyzedAt          pgtype.Timestamptz `json:"ai_analyzed_at"`
+	ID                    pgtype.UUID        `json:"id"`
+}
+
+func (q *Queries) UpdateEnrichment(ctx context.Context, arg UpdateEnrichmentParams) (Company, error) {
+	row := q.db.QueryRow(ctx, updateEnrichment,
+		arg.TrustpilotRating,
+		arg.TrustpilotReviewCount,
+		arg.TrustpilotFetchedAt,
+		arg.AiNeeds,
+		arg.AiSummary,
+		arg.AiAnalyzedAt,
+		arg.ID,
+	)
+	var i Company
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Domain,
+		&i.WebsiteUrl,
+		&i.Status,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.TrustpilotRating,
+		&i.TrustpilotReviewCount,
+		&i.TrustpilotFetchedAt,
+		&i.AiNeeds,
+		&i.AiSummary,
+		&i.AiAnalyzedAt,
 	)
 	return i, err
 }

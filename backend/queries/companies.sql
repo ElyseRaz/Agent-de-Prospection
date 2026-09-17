@@ -34,3 +34,16 @@ DELETE FROM companies WHERE id = $1;
 
 -- name: CountCompaniesByUser :one
 SELECT count(*) FROM companies WHERE user_id = $1;
+
+-- name: UpdateEnrichment :one
+UPDATE companies
+SET
+    trustpilot_rating = sqlc.narg(trustpilot_rating),
+    trustpilot_review_count = sqlc.narg(trustpilot_review_count),
+    trustpilot_fetched_at = sqlc.narg(trustpilot_fetched_at),
+    ai_needs = sqlc.arg(ai_needs),
+    ai_summary = sqlc.narg(ai_summary),
+    ai_analyzed_at = sqlc.narg(ai_analyzed_at),
+    updated_at = now()
+WHERE id = sqlc.arg(id)
+RETURNING *;

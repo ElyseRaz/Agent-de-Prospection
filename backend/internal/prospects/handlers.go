@@ -6,22 +6,25 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/labstack/echo/v4"
 
 	"leadpilot/internal/auth"
 	"leadpilot/internal/db/sqlc"
+	"leadpilot/internal/tasks"
 )
 
 const uniqueViolationCode = "23505"
 
 type Handlers struct {
-	Queries *sqlc.Queries
+	Queries     *sqlc.Queries
+	AsynqClient *asynq.Client
 }
 
-func NewHandlers(queries *sqlc.Queries) *Handlers {
-	return &Handlers{Queries: queries}
+func NewHandlers(queries *sqlc.Queries, asynqClient *asynq.Client) *Handlers {
+	return &Handlers{Queries: queries, AsynqClient: asynqClient}
 }
 
 // loadOwnedCompany charge un prospect et verifie qu'il appartient bien a
@@ -307,4 +310,33 @@ func (h *Handlers) DeleteContact(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Erreur interne")
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+// EnrichCompany met en file un job d'enrichissement (Trustpilot + analyse
+// IA du site) plutot que de l'executer en ligne - ces deux appels reseau
+// externes ne doivent jamais bloquer la requete HTTP. Le resultat apparait
+// dans la fiche prospect (GET /prospects/{id}) une fois le job traite.
+func (h *Handlers) EnrichCompany(c echo.Context) error {
+	userID, ok := auth.UserIDFromContext(c)
+	if !ok {
+		return echo.NewHTTPError(http.StatusUnauthorized, "Authentification requise")
+	}
+
+	companyID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Identifiant invalide")
+	}
+	if _, err := h.loadOwnedCompany(c, companyID, userID); err != nil {
+		return err
+	}
+
+	task, err := tasks.NewEnrichProspectTask(companyID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Erreur interne")
+	}
+	if _, err := h.AsynqClient.Enqueue(task); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Impossible de programmer l'enrichissement")
+	}
+
+	return c.JSON(http.StatusAccepted, map[string]string{"status": "queued"})
 }

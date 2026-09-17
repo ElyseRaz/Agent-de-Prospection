@@ -147,7 +147,7 @@ précédent.
 | Phase | Contenu | Statut |
 |---|---|---|
 | 1 | Socle : Go/Echo, Next.js, auth JWT, Docker Compose, CI | ✅ |
-| 2 | CRM prospects (ajout manuel/CSV, `source_note`, fiche entreprise) | ⏳ |
-| 3 | Enrichissement (Trustpilot par domaine, analyse IA du site via Groq) | ⏳ |
-| 4 | Campagnes email (éditeur de template, envoi SMTP, désinscription, limite quotidienne) | ⏳ |
+| 2 | CRM prospects (ajout manuel/CSV, `source_note`, fiche entreprise) | ✅ |
+| 3 | Enrichissement (Trustpilot par domaine, analyse IA du site via Groq) | ✅ |
+| 4 | Campagnes email (éditeur de template, envoi SMTP, désinscription, limite quotidienne) | ✅ |
 | 5 | Suivi (Kanban contacté/répondu/converti) | ⏳ |

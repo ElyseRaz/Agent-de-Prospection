@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Building2 } from "lucide-react";
+import { Search, Building2, Star, Sparkles } from "lucide-react";
 
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { AppShell } from "@/components/layout/app-shell";
@@ -92,6 +92,7 @@ export default function ProspectsPage() {
                       <TableHead>Nom</TableHead>
                       <TableHead>Domaine</TableHead>
                       <TableHead>Statut</TableHead>
+                      <TableHead>Enrichissement</TableHead>
                       <TableHead>Ajoute le</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -106,6 +107,23 @@ export default function ProspectsPage() {
                         <TableCell className="text-muted-foreground">{prospect.domain ?? "—"}</TableCell>
                         <TableCell>
                           <StatusBadge status={prospect.status} />
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          <div className="flex items-center gap-3">
+                            {prospect.trustpilot_rating !== null && (
+                              <span className="flex items-center gap-1">
+                                <Star className="size-3.5 text-amber-500" />
+                                {prospect.trustpilot_rating.toFixed(1)}
+                              </span>
+                            )}
+                            {prospect.ai_needs.length > 0 && (
+                              <span className="flex items-center gap-1">
+                                <Sparkles className="size-3.5 text-primary" />
+                                {prospect.ai_needs.length}
+                              </span>
+                            )}
+                            {prospect.trustpilot_rating === null && prospect.ai_needs.length === 0 && "—"}
+                          </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {new Date(prospect.created_at).toLocaleDateString("fr-FR")}

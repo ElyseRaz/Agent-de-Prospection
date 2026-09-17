@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 
+	"github.com/hibiken/asynq"
+
 	"leadpilot/internal/config"
 	"leadpilot/internal/db"
 	"leadpilot/internal/httpserver"
@@ -22,7 +24,14 @@ func main() {
 	}
 	defer pool.Close()
 
-	e := httpserver.New(cfg, pool)
+	redisConnOpt, err := asynq.ParseRedisURI(cfg.RedisURL)
+	if err != nil {
+		log.Fatalf("URL Redis invalide: %v", err)
+	}
+	asynqClient := asynq.NewClient(redisConnOpt)
+	defer asynqClient.Close()
+
+	e := httpserver.New(cfg, pool, asynqClient)
 
 	log.Printf("demarrage LeadPilot API sur le port %s (env=%s)", cfg.Port, cfg.AppEnv)
 	if err := e.Start(":" + cfg.Port); err != nil {

@@ -64,3 +64,18 @@ export const addContactSchema = z.object({
 });
 
 export type AddContactFormValues = z.infer<typeof addContactSchema>;
+
+export const createCampaignSchema = z.object({
+  name: z.string().min(1, "Nom requis"),
+  subject: z.string().min(1, "Objet requis"),
+  body: z.string().min(1, "Corps du message requis"),
+  companyIds: z.array(z.string()).min(1, "Selectionne au moins un prospect"),
+});
+
+export type CreateCampaignFormValues = z.infer<typeof createCampaignSchema>;
+
+export const saveTemplateSchema = z.object({
+  name: z.string().min(1, "Nom du modele requis"),
+});
+
+export type SaveTemplateFormValues = z.infer<typeof saveTemplateSchema>;

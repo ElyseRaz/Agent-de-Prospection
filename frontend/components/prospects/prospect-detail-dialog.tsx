@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, Trash2, Plus } from "lucide-react";
+import { Loader2, Trash2, Plus, Sparkles, Star } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -31,8 +32,11 @@ import {
   useDeleteProspect,
   useAddContact,
   useDeleteContact,
+  useEnrichProspect,
 } from "@/hooks/use-prospects";
 import { ApiError } from "@/lib/api";
+
+const MAX_POLL_DURATION_MS = 30_000;
 
 interface ProspectDetailDialogProps {
   id: string | null;
@@ -40,12 +44,39 @@ interface ProspectDetailDialogProps {
 }
 
 export function ProspectDetailDialog({ id, onOpenChange }: ProspectDetailDialogProps) {
-  const { data: prospect, isLoading } = useProspect(id);
+  const [isPolling, setIsPolling] = useState(false);
+  const { data: prospect, isLoading } = useProspect(id, { poll: isPolling });
   const updateProspect = useUpdateProspect(id ?? "");
   const deleteProspect = useDeleteProspect();
   const addContact = useAddContact(id ?? "");
   const deleteContact = useDeleteContact(id ?? "");
+  const enrichProspect = useEnrichProspect(id ?? "");
   const [showAddContact, setShowAddContact] = useState(false);
+  const enrichSnapshotRef = useRef<string | null>(null);
+
+  // Le job d'enrichissement est asynchrone (Asynq) : on reinterroge la
+  // fiche jusqu'a ce que `updated_at` change par rapport a l'instant du
+  // declenchement, avec un plafond de securite si le worker ne repond pas.
+  useEffect(() => {
+    if (!isPolling || !prospect) return;
+    if (enrichSnapshotRef.current && prospect.updated_at !== enrichSnapshotRef.current) {
+      setIsPolling(false);
+      toast.success("Enrichissement termine");
+    }
+  }, [isPolling, prospect]);
+
+  const handleEnrich = async () => {
+    if (!prospect) return;
+    enrichSnapshotRef.current = prospect.updated_at;
+    try {
+      await enrichProspect.mutateAsync();
+      setIsPolling(true);
+      toast.info("Enrichissement lance (Trustpilot + analyse IA du site)");
+      setTimeout(() => setIsPolling(false), MAX_POLL_DURATION_MS);
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Erreur lors du lancement de l'enrichissement");
+    }
+  };
 
   const {
     register,
@@ -184,6 +215,74 @@ export function ProspectDetailDialog({ id, onOpenChange }: ProspectDetailDialogP
                 </Button>
               </DialogFooter>
             </form>
+
+            <Separator />
+
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Enrichissement</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleEnrich}
+                  disabled={enrichProspect.isPending || isPolling}
+                >
+                  {enrichProspect.isPending || isPolling ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="size-4" />
+                  )}
+                  {isPolling ? "Enrichissement en cours..." : "Enrichir"}
+                </Button>
+              </div>
+
+              {(prospect.trustpilot_fetched_at || prospect.ai_analyzed_at) && (
+                <div className="flex flex-col gap-2 rounded-md border p-2.5 text-sm">
+                  {prospect.trustpilot_fetched_at && (
+                    <div className="flex items-center gap-2">
+                      <Star className="size-4 text-amber-500" />
+                      {prospect.trustpilot_rating !== null ? (
+                        <span>
+                          Trustpilot : <strong>{prospect.trustpilot_rating.toFixed(1)}/5</strong>
+                          {prospect.trustpilot_review_count !== null &&
+                            ` (${prospect.trustpilot_review_count} avis)`}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          Trustpilot : entreprise non trouvee
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {prospect.ai_analyzed_at && (
+                    <div className="flex flex-col gap-1.5">
+                      {prospect.ai_needs.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {prospect.ai_needs.map((need) => (
+                            <Badge key={need} variant="secondary">
+                              {need}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          Aucun besoin specifique detecte par l&apos;IA
+                        </span>
+                      )}
+                      {prospect.ai_summary && (
+                        <p className="text-xs text-muted-foreground">{prospect.ai_summary}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              {!prospect.trustpilot_fetched_at && !prospect.ai_analyzed_at && !isPolling && (
+                <p className="text-xs text-muted-foreground">
+                  Pas encore enrichi. Necessite un domaine (Trustpilot) et/ou un site web (analyse
+                  IA) renseignes ci-dessus.
+                </p>
+              )}
+            </div>
 
             <Separator />
 

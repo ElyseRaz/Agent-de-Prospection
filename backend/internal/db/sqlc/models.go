@@ -11,6 +11,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type CampaignStatus string
+
+const (
+	CampaignStatusDraft   CampaignStatus = "draft"
+	CampaignStatusSending CampaignStatus = "sending"
+	CampaignStatusSent    CampaignStatus = "sent"
+)
+
+func (e *CampaignStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = CampaignStatus(s)
+	case string:
+		*e = CampaignStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for CampaignStatus: %T", src)
+	}
+	return nil
+}
+
+type NullCampaignStatus struct {
+	CampaignStatus CampaignStatus `json:"campaign_status"`
+	Valid          bool           `json:"valid"` // Valid is true if CampaignStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullCampaignStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.CampaignStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.CampaignStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullCampaignStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.CampaignStatus), nil
+}
+
 type CompanyStatus string
 
 const (
@@ -56,6 +99,50 @@ func (ns NullCompanyStatus) Value() (driver.Value, error) {
 	return string(ns.CompanyStatus), nil
 }
 
+type RecipientStatus string
+
+const (
+	RecipientStatusPending      RecipientStatus = "pending"
+	RecipientStatusSent         RecipientStatus = "sent"
+	RecipientStatusFailed       RecipientStatus = "failed"
+	RecipientStatusUnsubscribed RecipientStatus = "unsubscribed"
+)
+
+func (e *RecipientStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RecipientStatus(s)
+	case string:
+		*e = RecipientStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RecipientStatus: %T", src)
+	}
+	return nil
+}
+
+type NullRecipientStatus struct {
+	RecipientStatus RecipientStatus `json:"recipient_status"`
+	Valid           bool            `json:"valid"` // Valid is true if RecipientStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRecipientStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.RecipientStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RecipientStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRecipientStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RecipientStatus), nil
+}
+
 type UserRole string
 
 const (
@@ -98,16 +185,45 @@ func (ns NullUserRole) Value() (driver.Value, error) {
 	return string(ns.UserRole), nil
 }
 
+type Campaign struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Name      string             `json:"name"`
+	Subject   string             `json:"subject"`
+	Body      string             `json:"body"`
+	Status    CampaignStatus     `json:"status"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	SentAt    pgtype.Timestamptz `json:"sent_at"`
+}
+
+type CampaignRecipient struct {
+	ID           pgtype.UUID        `json:"id"`
+	CampaignID   pgtype.UUID        `json:"campaign_id"`
+	ContactID    pgtype.UUID        `json:"contact_id"`
+	CompanyID    pgtype.UUID        `json:"company_id"`
+	Status       RecipientStatus    `json:"status"`
+	ErrorMessage pgtype.Text        `json:"error_message"`
+	SentAt       pgtype.Timestamptz `json:"sent_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
 type Company struct {
-	ID         pgtype.UUID        `json:"id"`
-	UserID     pgtype.UUID        `json:"user_id"`
-	Name       string             `json:"name"`
-	Domain     pgtype.Text        `json:"domain"`
-	WebsiteUrl pgtype.Text        `json:"website_url"`
-	Status     CompanyStatus      `json:"status"`
-	Notes      pgtype.Text        `json:"notes"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	ID                    pgtype.UUID        `json:"id"`
+	UserID                pgtype.UUID        `json:"user_id"`
+	Name                  string             `json:"name"`
+	Domain                pgtype.Text        `json:"domain"`
+	WebsiteUrl            pgtype.Text        `json:"website_url"`
+	Status                CompanyStatus      `json:"status"`
+	Notes                 pgtype.Text        `json:"notes"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	TrustpilotRating      pgtype.Float4      `json:"trustpilot_rating"`
+	TrustpilotReviewCount pgtype.Int4        `json:"trustpilot_review_count"`
+	TrustpilotFetchedAt   pgtype.Timestamptz `json:"trustpilot_fetched_at"`
+	AiNeeds               []byte             `json:"ai_needs"`
+	AiSummary             pgtype.Text        `json:"ai_summary"`
+	AiAnalyzedAt          pgtype.Timestamptz `json:"ai_analyzed_at"`
 }
 
 type Contact struct {
@@ -117,6 +233,22 @@ type Contact struct {
 	FullName   pgtype.Text        `json:"full_name"`
 	SourceNote string             `json:"source_note"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type EmailTemplate struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Name      string             `json:"name"`
+	Subject   string             `json:"subject"`
+	Body      string             `json:"body"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Unsubscribe struct {
+	ID             pgtype.UUID        `json:"id"`
+	Email          string             `json:"email"`
+	UnsubscribedAt pgtype.Timestamptz `json:"unsubscribed_at"`
 }
 
 type User struct {
