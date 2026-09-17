@@ -17,6 +17,10 @@ func main() {
 		log.Fatalf("configuration invalide: %v", err)
 	}
 
+	if err := db.RunMigrations(cfg.DatabaseURL); err != nil {
+		log.Fatalf("migrations: %v", err)
+	}
+
 	ctx := context.Background()
 	pool, err := db.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
