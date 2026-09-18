@@ -16,6 +16,7 @@ import { Badge } from "@/components/base/badges/badges";
 import { FeaturedIcon } from "@/components/foundations/featured-icon/featured-icon";
 import { BackgroundPattern } from "@/components/shared-assets/background-patterns";
 import { Reveal } from "@/components/shared-assets/reveal";
+import { AnimatedBackground } from "@/components/shared-assets/animated-background";
 import { useAuthStore } from "@/store/auth-store";
 
 const FEATURES = [
@@ -85,7 +86,8 @@ export default function LandingPage() {
   const isAuthenticated = Boolean(accessToken);
 
   return (
-    <div className="flex min-h-screen flex-col overflow-x-hidden bg-primary">
+    <div className="relative flex min-h-screen flex-col overflow-x-hidden">
+      <AnimatedBackground />
       <header className="sticky top-0 z-20 border-b border-secondary bg-primary/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -123,15 +125,6 @@ export default function LandingPage() {
               className="mt-[-80px] text-utility-brand-100 opacity-60 mask-b-from-10%"
             />
           </div>
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -top-24 -left-24 -z-10 size-96 animate-pulse rounded-full bg-utility-brand-200/40 blur-3xl [animation-duration:7s]"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute top-10 -right-32 -z-10 size-[28rem] animate-pulse rounded-full bg-utility-blue-200/40 blur-3xl [animation-duration:9s]"
-          />
-
           <div className="mx-auto flex max-w-4xl flex-col items-center gap-6 px-4 py-20 text-center sm:px-6 sm:py-28">
             <Reveal>
               <Badge color="brand" size="lg" className="gap-2">
