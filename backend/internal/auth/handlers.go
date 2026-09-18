@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -33,11 +34,13 @@ func NewHandlers(queries *sqlc.Queries, secretKey string, accessExpiry, refreshE
 type registerRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	FullName string `json:"full_name"`
 }
 
 type userResponse struct {
 	ID        string `json:"id"`
 	Email     string `json:"email"`
+	FullName  string `json:"full_name"`
 	Role      string `json:"role"`
 	IsActive  bool   `json:"is_active"`
 	CreatedAt string `json:"created_at"`
@@ -47,6 +50,7 @@ func toUserResponse(u sqlc.User) userResponse {
 	return userResponse{
 		ID:        FromPgUUID(u.ID).String(),
 		Email:     u.Email,
+		FullName:  u.FullName,
 		Role:      string(u.Role),
 		IsActive:  u.IsActive,
 		CreatedAt: u.CreatedAt.Time.Format(time.RFC3339),
@@ -64,6 +68,10 @@ func (h *Handlers) Register(c echo.Context) error {
 	if len(req.Password) < 8 {
 		return echo.NewHTTPError(http.StatusBadRequest, "Le mot de passe doit contenir au moins 8 caracteres")
 	}
+	fullName := strings.TrimSpace(req.FullName)
+	if fullName == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "Le nom complet est requis")
+	}
 
 	hash, err := HashPassword(req.Password)
 	if err != nil {
@@ -74,6 +82,7 @@ func (h *Handlers) Register(c echo.Context) error {
 		Email:        req.Email,
 		PasswordHash: hash,
 		Role:         sqlc.UserRoleUser,
+		FullName:     fullName,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -177,6 +186,36 @@ func (h *Handlers) Me(c echo.Context) error {
 	user, err := h.Queries.GetUserByID(c.Request().Context(), ToPgUUID(userID))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, "Utilisateur introuvable ou inactif")
+	}
+
+	return c.JSON(http.StatusOK, toUserResponse(user))
+}
+
+type updateMeRequest struct {
+	FullName string `json:"full_name"`
+}
+
+func (h *Handlers) UpdateMe(c echo.Context) error {
+	userID, ok := UserIDFromContext(c)
+	if !ok {
+		return echo.NewHTTPError(http.StatusUnauthorized, "Authentification requise")
+	}
+
+	var req updateMeRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Corps de requete invalide")
+	}
+	fullName := strings.TrimSpace(req.FullName)
+	if fullName == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "Le nom complet est requis")
+	}
+
+	user, err := h.Queries.UpdateUserFullName(c.Request().Context(), sqlc.UpdateUserFullNameParams{
+		ID:       ToPgUUID(userID),
+		FullName: fullName,
+	})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Erreur interne")
 	}
 
 	return c.JSON(http.StatusOK, toUserResponse(user))

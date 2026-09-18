@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const registerSchema = z
   .object({
+    fullName: z.string().min(1, "Nom complet requis"),
     email: z.string().min(1, "Email requis").email("Email invalide"),
     password: z.string().min(8, "8 caracteres minimum"),
     confirmPassword: z.string().min(1, "Confirmation requise"),
@@ -19,6 +20,12 @@ export const loginSchema = z.object({
 });
 
 export type LoginFormValues = z.infer<typeof loginSchema>;
+
+export const profileSchema = z.object({
+  fullName: z.string().min(1, "Nom complet requis"),
+});
+
+export type ProfileFormValues = z.infer<typeof profileSchema>;
 
 const optionalUrl = z
   .string()

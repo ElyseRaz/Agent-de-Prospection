@@ -9,6 +9,7 @@ import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { Badge } from "@/components/base/badges/badges";
 import type { BadgeColor } from "@/components/base/badges/badges";
 import { Dialog, Modal, ModalOverlay } from "@/components/application/modals/modal";
+import { ConfirmDialog } from "@/components/application/modals/confirm-dialog";
 import { LoadingIndicator } from "@/components/application/loading-indicator/loading-indicator";
 import { CampaignStatusBadge } from "@/components/campaigns/campaign-status-badge";
 import { useCampaign, useDeleteCampaign, useSendCampaign } from "@/hooks/use-campaigns";
@@ -42,6 +43,8 @@ export function CampaignDetailDialog({ id, onOpenChange }: CampaignDetailDialogP
   const sendCampaign = useSendCampaign(id ?? "");
   const deleteCampaign = useDeleteCampaign();
   const sendInFlightRef = useRef(false);
+  const [confirmSend, setConfirmSend] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     if (!isPolling || !campaign) return;
@@ -54,18 +57,12 @@ export function CampaignDetailDialog({ id, onOpenChange }: CampaignDetailDialogP
 
   const handleSend = async () => {
     if (!campaign) return;
-    if (
-      !window.confirm(
-        `Envoyer "${campaign.name}" a ${campaign.recipients.length} destinataire(s) maintenant ?`,
-      )
-    ) {
-      return;
-    }
     try {
       await sendCampaign.mutateAsync();
       toast.info("Envoi lance");
       sendInFlightRef.current = true;
       setIsPolling(true);
+      setConfirmSend(false);
       setTimeout(() => setIsPolling(false), MAX_POLL_DURATION_MS);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Erreur lors du lancement de l'envoi");
@@ -74,10 +71,10 @@ export function CampaignDetailDialog({ id, onOpenChange }: CampaignDetailDialogP
 
   const handleDelete = async () => {
     if (!id) return;
-    if (!window.confirm("Supprimer definitivement cette campagne ?")) return;
     try {
       await deleteCampaign.mutateAsync(id);
       toast.success("Campagne supprimee");
+      setConfirmDelete(false);
       onOpenChange(false);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Erreur lors de la suppression");
@@ -167,18 +164,17 @@ export function CampaignDetailDialog({ id, onOpenChange }: CampaignDetailDialogP
                   type="button"
                   color="secondary-destructive"
                   iconLeading={Trash01}
-                  isLoading={deleteCampaign.isPending}
                   isDisabled={campaign.status === "sending"}
-                  onClick={handleDelete}
+                  onClick={() => setConfirmDelete(true)}
                 >
                   Supprimer
                 </Button>
                 <Button
                   type="button"
                   iconLeading={Send01}
-                  isLoading={sendCampaign.isPending || campaign.status === "sending"}
+                  isLoading={campaign.status === "sending"}
                   isDisabled={campaign.status !== "draft"}
-                  onClick={handleSend}
+                  onClick={() => setConfirmSend(true)}
                 >
                   {campaign.status === "sent"
                     ? "Deja envoyee"
@@ -193,6 +189,32 @@ export function CampaignDetailDialog({ id, onOpenChange }: CampaignDetailDialogP
           )}
         </Dialog>
       </Modal>
+
+      {campaign && (
+        <>
+          <ConfirmDialog
+            isOpen={confirmSend}
+            onOpenChange={setConfirmSend}
+            onConfirm={handleSend}
+            isLoading={sendCampaign.isPending}
+            isDestructive={false}
+            icon={Send01}
+            title="Envoyer cette campagne ?"
+            description={`"${campaign.name}" sera envoyee a ${campaign.recipients.length} destinataire(s). Chaque email inclut un lien de desinscription.`}
+            confirmLabel="Envoyer"
+          />
+
+          <ConfirmDialog
+            isOpen={confirmDelete}
+            onOpenChange={setConfirmDelete}
+            onConfirm={handleDelete}
+            isLoading={deleteCampaign.isPending}
+            title="Supprimer cette campagne ?"
+            description={`"${campaign.name}" sera definitivement supprimee. Cette action est irreversible.`}
+            confirmLabel="Supprimer"
+          />
+        </>
+      )}
     </ModalOverlay>
   );
 }

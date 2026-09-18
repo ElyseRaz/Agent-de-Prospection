@@ -51,6 +51,7 @@ func New(cfg config.Config, pool *pgxpool.Pool, asynqClient *asynq.Client) *echo
 	authGroup.POST("/login", authHandlers.Login)
 	authGroup.POST("/refresh", authHandlers.Refresh)
 	authGroup.GET("/me", authHandlers.Me, auth.RequireAuth(cfg.SecretKey))
+	authGroup.PATCH("/me", authHandlers.UpdateMe, auth.RequireAuth(cfg.SecretKey))
 
 	prospectGroup := e.Group(apiV1Prefix+"/prospects", auth.RequireAuth(cfg.SecretKey))
 	prospectGroup.POST("", prospectHandlers.CreateCompany)

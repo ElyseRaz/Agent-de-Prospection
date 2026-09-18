@@ -1,6 +1,6 @@
 -- name: CreateUser :one
-INSERT INTO users (email, password_hash, role)
-VALUES ($1, $2, $3)
+INSERT INTO users (email, password_hash, role, full_name)
+VALUES ($1, $2, $3, $4)
 RETURNING *;
 
 -- name: GetUserByEmail :one
@@ -14,6 +14,9 @@ UPDATE users SET is_active = $2, updated_at = now() WHERE id = $1 RETURNING *;
 
 -- name: UpdateUserRole :one
 UPDATE users SET role = $2, updated_at = now() WHERE id = $1 RETURNING *;
+
+-- name: UpdateUserFullName :one
+UPDATE users SET full_name = $2, updated_at = now() WHERE id = $1 RETURNING *;
 
 -- name: ListUsers :many
 SELECT * FROM users ORDER BY created_at DESC;

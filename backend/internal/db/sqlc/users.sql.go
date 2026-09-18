@@ -12,19 +12,25 @@ import (
 )
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (email, password_hash, role)
-VALUES ($1, $2, $3)
-RETURNING id, email, password_hash, role, is_active, created_at, updated_at
+INSERT INTO users (email, password_hash, role, full_name)
+VALUES ($1, $2, $3, $4)
+RETURNING id, email, password_hash, role, is_active, created_at, updated_at, full_name
 `
 
 type CreateUserParams struct {
 	Email        string   `json:"email"`
 	PasswordHash string   `json:"password_hash"`
 	Role         UserRole `json:"role"`
+	FullName     string   `json:"full_name"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, createUser, arg.Email, arg.PasswordHash, arg.Role)
+	row := q.db.QueryRow(ctx, createUser,
+		arg.Email,
+		arg.PasswordHash,
+		arg.Role,
+		arg.FullName,
+	)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -34,12 +40,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FullName,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, role, is_active, created_at, updated_at FROM users WHERE email = $1
+SELECT id, email, password_hash, role, is_active, created_at, updated_at, full_name FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -53,12 +60,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FullName,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, role, is_active, created_at, updated_at FROM users WHERE id = $1
+SELECT id, email, password_hash, role, is_active, created_at, updated_at, full_name FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -72,12 +80,13 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FullName,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, password_hash, role, is_active, created_at, updated_at FROM users ORDER BY created_at DESC
+SELECT id, email, password_hash, role, is_active, created_at, updated_at, full_name FROM users ORDER BY created_at DESC
 `
 
 func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
@@ -97,6 +106,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.FullName,
 		); err != nil {
 			return nil, err
 		}
@@ -109,7 +119,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 }
 
 const updateUserActive = `-- name: UpdateUserActive :one
-UPDATE users SET is_active = $2, updated_at = now() WHERE id = $1 RETURNING id, email, password_hash, role, is_active, created_at, updated_at
+UPDATE users SET is_active = $2, updated_at = now() WHERE id = $1 RETURNING id, email, password_hash, role, is_active, created_at, updated_at, full_name
 `
 
 type UpdateUserActiveParams struct {
@@ -128,12 +138,38 @@ func (q *Queries) UpdateUserActive(ctx context.Context, arg UpdateUserActivePara
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FullName,
+	)
+	return i, err
+}
+
+const updateUserFullName = `-- name: UpdateUserFullName :one
+UPDATE users SET full_name = $2, updated_at = now() WHERE id = $1 RETURNING id, email, password_hash, role, is_active, created_at, updated_at, full_name
+`
+
+type UpdateUserFullNameParams struct {
+	ID       pgtype.UUID `json:"id"`
+	FullName string      `json:"full_name"`
+}
+
+func (q *Queries) UpdateUserFullName(ctx context.Context, arg UpdateUserFullNameParams) (User, error) {
+	row := q.db.QueryRow(ctx, updateUserFullName, arg.ID, arg.FullName)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Role,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.FullName,
 	)
 	return i, err
 }
 
 const updateUserRole = `-- name: UpdateUserRole :one
-UPDATE users SET role = $2, updated_at = now() WHERE id = $1 RETURNING id, email, password_hash, role, is_active, created_at, updated_at
+UPDATE users SET role = $2, updated_at = now() WHERE id = $1 RETURNING id, email, password_hash, role, is_active, created_at, updated_at, full_name
 `
 
 type UpdateUserRoleParams struct {
@@ -152,6 +188,7 @@ func (q *Queries) UpdateUserRole(ctx context.Context, arg UpdateUserRoleParams) 
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.FullName,
 	)
 	return i, err
 }

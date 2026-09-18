@@ -7,8 +7,12 @@ export interface TokenPair {
   token_type: string;
 }
 
-export function registerUser(payload: { email: string; password: string }): Promise<AuthUser> {
-  return apiFetch<AuthUser>("/auth/register", { method: "POST", body: payload, skipAuth: true });
+export function registerUser(payload: { email: string; password: string; fullName: string }): Promise<AuthUser> {
+  return apiFetch<AuthUser>("/auth/register", {
+    method: "POST",
+    body: { email: payload.email, password: payload.password, full_name: payload.fullName },
+    skipAuth: true,
+  });
 }
 
 export function loginUser(payload: { email: string; password: string }): Promise<TokenPair> {
@@ -17,4 +21,8 @@ export function loginUser(payload: { email: string; password: string }): Promise
 
 export function fetchCurrentUser(): Promise<AuthUser> {
   return apiFetch<AuthUser>("/auth/me");
+}
+
+export function updateCurrentUser(payload: { fullName: string }): Promise<AuthUser> {
+  return apiFetch<AuthUser>("/auth/me", { method: "PATCH", body: { full_name: payload.fullName } });
 }

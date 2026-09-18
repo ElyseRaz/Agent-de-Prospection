@@ -12,6 +12,9 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "LeadPilot",
   description: "Prospection commerciale B2B enrichie par IA.",
+  icons: {
+    icon: "/leadpilot.svg",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

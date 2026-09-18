@@ -50,6 +50,7 @@ type Querier interface {
 	UpdateEnrichment(ctx context.Context, arg UpdateEnrichmentParams) (Company, error)
 	UpdateTemplate(ctx context.Context, arg UpdateTemplateParams) (EmailTemplate, error)
 	UpdateUserActive(ctx context.Context, arg UpdateUserActiveParams) (User, error)
+	UpdateUserFullName(ctx context.Context, arg UpdateUserFullNameParams) (User, error)
 	UpdateUserRole(ctx context.Context, arg UpdateUserRoleParams) (User, error)
 }
 

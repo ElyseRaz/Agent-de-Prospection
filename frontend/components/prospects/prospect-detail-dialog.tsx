@@ -10,6 +10,7 @@ import { Button } from "@/components/base/buttons/button";
 import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { Badge } from "@/components/base/badges/badges";
 import { Dialog, Modal, ModalOverlay } from "@/components/application/modals/modal";
+import { ConfirmDialog } from "@/components/application/modals/confirm-dialog";
 import { NativeSelect } from "@/components/base/select/select-native";
 import { FormInput } from "@/components/forms/form-input";
 import { FormTextArea } from "@/components/forms/form-textarea";
@@ -47,6 +48,8 @@ export function ProspectDetailDialog({ id, onOpenChange }: ProspectDetailDialogP
   const deleteContact = useDeleteContact(id ?? "");
   const enrichProspect = useEnrichProspect(id ?? "");
   const [showAddContact, setShowAddContact] = useState(false);
+  const [confirmDeleteProspect, setConfirmDeleteProspect] = useState(false);
+  const [contactToDelete, setContactToDelete] = useState<string | null>(null);
   const enrichSnapshotRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -127,11 +130,21 @@ export function ProspectDetailDialog({ id, onOpenChange }: ProspectDetailDialogP
 
   const handleDelete = async () => {
     if (!id) return;
-    if (!window.confirm("Supprimer definitivement ce prospect et ses contacts ?")) return;
     try {
       await deleteProspect.mutateAsync(id);
       toast.success("Prospect supprime");
+      setConfirmDeleteProspect(false);
       onOpenChange(false);
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Erreur lors de la suppression");
+    }
+  };
+
+  const handleDeleteContact = async () => {
+    if (!contactToDelete) return;
+    try {
+      await deleteContact.mutateAsync(contactToDelete);
+      setContactToDelete(null);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Erreur lors de la suppression");
     }
@@ -174,8 +187,7 @@ export function ProspectDetailDialog({ id, onOpenChange }: ProspectDetailDialogP
                     type="button"
                     color="secondary-destructive"
                     iconLeading={Trash01}
-                    isLoading={deleteProspect.isPending}
-                    onClick={handleDelete}
+                    onClick={() => setConfirmDeleteProspect(true)}
                   >
                     Supprimer
                   </Button>
@@ -273,13 +285,7 @@ export function ProspectDetailDialog({ id, onOpenChange }: ProspectDetailDialogP
                         color="tertiary"
                         icon={Trash01}
                         tooltip="Supprimer"
-                        onClick={async () => {
-                          try {
-                            await deleteContact.mutateAsync(contact.id);
-                          } catch (error) {
-                            toast.error(error instanceof ApiError ? error.message : "Erreur lors de la suppression");
-                          }
-                        }}
+                        onClick={() => setContactToDelete(contact.id)}
                       />
                     </li>
                   ))}
@@ -313,6 +319,26 @@ export function ProspectDetailDialog({ id, onOpenChange }: ProspectDetailDialogP
           )}
         </Dialog>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={confirmDeleteProspect}
+        onOpenChange={setConfirmDeleteProspect}
+        onConfirm={handleDelete}
+        isLoading={deleteProspect.isPending}
+        title="Supprimer ce prospect ?"
+        description={`"${prospect?.name ?? "Ce prospect"}" et tous ses contacts seront definitivement supprimes. Cette action est irreversible.`}
+        confirmLabel="Supprimer"
+      />
+
+      <ConfirmDialog
+        isOpen={contactToDelete !== null}
+        onOpenChange={(open) => !open && setContactToDelete(null)}
+        onConfirm={handleDeleteContact}
+        isLoading={deleteContact.isPending}
+        title="Supprimer ce contact ?"
+        description={`${prospect?.contacts.find((c) => c.id === contactToDelete)?.email ?? "Ce contact"} sera definitivement retire de la fiche.`}
+        confirmLabel="Supprimer"
+      />
     </ModalOverlay>
   );
 }

@@ -1,10 +1,22 @@
 "use client";
 
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { CheckCircle, XCircle } from "@untitledui/icons";
+import { toast } from "sonner";
 
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { AppShell } from "@/components/layout/app-shell";
+import { Avatar } from "@/components/base/avatar/avatar";
+import { Button } from "@/components/base/buttons/button";
+import { Input } from "@/components/base/input/input";
+import { FormInput } from "@/components/forms/form-input";
 import { useSettingsStatus } from "@/hooks/use-prospects";
+import { profileSchema, type ProfileFormValues } from "@/lib/schemas";
+import { updateCurrentUser } from "@/lib/auth-api";
+import { useAuthStore } from "@/store/auth-store";
+import { getDisplayName, getInitials } from "@/lib/utils/user-display";
+import { ApiError } from "@/lib/api";
 
 function ProviderRow({
   name,
@@ -45,6 +57,27 @@ function ProviderRow({
 
 export default function SettingsPage() {
   const { data: status, isLoading } = useSettingsStatus();
+  const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+
+  const {
+    control,
+    handleSubmit,
+    formState: { isSubmitting, isDirty },
+  } = useForm<ProfileFormValues>({
+    resolver: zodResolver(profileSchema),
+    values: { fullName: user?.full_name ?? "" },
+  });
+
+  const onSubmitProfile = async (values: ProfileFormValues) => {
+    try {
+      const updated = await updateCurrentUser({ fullName: values.fullName });
+      setUser(updated);
+      toast.success("Profil mis a jour");
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Erreur lors de la mise a jour du profil");
+    }
+  };
 
   return (
     <AuthGuard>
@@ -56,6 +89,29 @@ export default function SettingsPage() {
               Les cles d&apos;API restent exclusivement dans le fichier <code>.env</code> du
               serveur — jamais stockees en base ni affichees ici.
             </p>
+          </div>
+
+          <div className="rounded-xl bg-primary shadow-xs ring-1 ring-secondary">
+            <div className="border-b border-secondary p-5">
+              <h2 className="text-md font-semibold text-primary">Mon compte</h2>
+              <p className="text-sm text-tertiary">Ton nom et ton avatar, visibles dans toute l&apos;application.</p>
+            </div>
+            <form onSubmit={handleSubmit(onSubmitProfile)} className="flex flex-col gap-4 p-5">
+              <div className="flex items-center gap-4">
+                <Avatar size="lg" initials={getInitials(user?.full_name, user?.email)} alt={getDisplayName(user?.full_name, user?.email)} />
+                <div>
+                  <p className="text-sm font-medium text-primary">{getDisplayName(user?.full_name, user?.email)}</p>
+                  <p className="text-sm text-tertiary">{user?.email}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormInput control={control} name="fullName" label="Nom complet" />
+                <Input label="Email" value={user?.email ?? ""} isDisabled onChange={() => {}} />
+              </div>
+              <Button type="submit" size="sm" className="self-end" isLoading={isSubmitting} isDisabled={!isDirty}>
+                Enregistrer
+              </Button>
+            </form>
           </div>
 
           <div className="rounded-xl bg-primary shadow-xs ring-1 ring-secondary">
