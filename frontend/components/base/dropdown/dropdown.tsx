@@ -39,9 +39,21 @@ interface DropdownItemProps extends AriaMenuItemProps {
     avatarUrl?: string;
     /** The selection indicator to be displayed on the item. */
     selectionIndicator?: "checkmark" | "checkbox" | "radio" | "toggle" | "none";
+    /** Styles the item in red, for destructive/dangerous actions (delete, logout). */
+    destructive?: boolean;
 }
 
-const DropdownItem = ({ label, children, addon, icon: Icon, avatarUrl, unstyled, selectionIndicator = "checkmark", ...props }: DropdownItemProps) => {
+const DropdownItem = ({
+    label,
+    children,
+    addon,
+    icon: Icon,
+    avatarUrl,
+    unstyled,
+    selectionIndicator = "checkmark",
+    destructive,
+    ...props
+}: DropdownItemProps) => {
     const SelectionIndicator = useCallback(
         (state: MenuItemRenderProps & { className?: string }) => {
             if (selectionIndicator === "checkmark") {
@@ -92,8 +104,8 @@ const DropdownItem = ({ label, children, addon, icon: Icon, avatarUrl, unstyled,
                 <div
                     className={cx(
                         "relative flex items-center rounded-md px-2.5 py-2 outline-focus-ring transition duration-100 ease-linear",
-                        !state.isDisabled && "group-hover:bg-primary_hover",
-                        state.isFocused && "bg-primary_hover",
+                        !state.isDisabled && (destructive ? "group-hover:bg-error-primary" : "group-hover:bg-primary_hover"),
+                        state.isFocused && (destructive ? "bg-error-primary" : "bg-primary_hover"),
                         state.isFocusVisible && "outline-2 -outline-offset-2",
                         state.hasSubmenu && "pr-1.5",
                     )}
@@ -106,9 +118,20 @@ const DropdownItem = ({ label, children, addon, icon: Icon, avatarUrl, unstyled,
                         </div>
                     )}
 
-                    {Icon && <Icon aria-hidden="true" className="mr-2 size-4 shrink-0 stroke-[2.25px] text-fg-quaternary" />}
+                    {Icon && (
+                        <Icon
+                            aria-hidden="true"
+                            className={cx("mr-2 size-4 shrink-0 stroke-[2.25px]", destructive ? "text-fg-error-primary" : "text-fg-quaternary")}
+                        />
+                    )}
 
-                    <span className={cx("grow truncate text-sm font-semibold text-secondary", state.isFocused && "text-secondary_hover")}>
+                    <span
+                        className={cx(
+                            "grow truncate text-sm font-semibold",
+                            destructive ? "text-error-primary" : "text-secondary",
+                            state.isFocused && !destructive && "text-secondary_hover",
+                        )}
+                    >
                         {label || (typeof children === "function" ? children(state) : children)}
                     </span>
 

@@ -31,6 +31,7 @@ export default function RegisterPage() {
       setTokens(tokens.access_token, tokens.refresh_token);
       const user = await fetchCurrentUser();
       setUser(user);
+      toast.success(`Compte cree, bienvenue ${user.full_name || user.email}`);
       router.replace("/dashboard");
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "Erreur lors de la creation du compte";

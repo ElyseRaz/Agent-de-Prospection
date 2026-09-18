@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutAlt01, Users01, BarChartSquare02, Mail01, Settings01, LogOut01 } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
+import { toast } from "sonner";
 
 import { Avatar } from "@/components/base/avatar/avatar";
 import { AvatarLabelGroup } from "@/components/base/avatar/avatar-label-group";
@@ -33,6 +34,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const handleLogout = () => {
     logout();
+    toast.success("Deconnexion reussie");
     router.replace("/login");
   };
 
@@ -87,7 +89,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <Dropdown.Item id="settings" label="Parametres du compte" icon={Settings01} />
                 <Dropdown.Separator />
-                <Dropdown.Item id="logout" label="Se deconnecter" icon={LogOut01} />
+                <Dropdown.Item id="logout" label="Se deconnecter" icon={LogOut01} destructive />
               </Dropdown.Menu>
             </Dropdown.Popover>
           </Dropdown.Root>
@@ -120,7 +122,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <Dropdown.Item id="settings" label="Parametres du compte" icon={Settings01} />
                 <Dropdown.Separator />
-                <Dropdown.Item id="logout" label="Se deconnecter" icon={LogOut01} />
+                <Dropdown.Item id="logout" label="Se deconnecter" icon={LogOut01} destructive />
               </Dropdown.Menu>
             </Dropdown.Popover>
           </Dropdown.Root>
@@ -132,7 +134,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         isOpen={confirmLogout}
         onOpenChange={setConfirmLogout}
         onConfirm={handleLogout}
-        isDestructive={false}
+        isDestructive
         icon={LogOut01}
         title="Se deconnecter ?"
         description={`Tu seras deconnecte de ${getDisplayName(user?.full_name, user?.email)} (${user?.email ?? ""}).`}

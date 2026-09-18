@@ -90,6 +90,7 @@ export function KanbanBoard({ onOpen }: { onOpen: (id: string) => void }) {
     try {
       await updateProspectRequest(id, { status });
       queryClient.invalidateQueries({ queryKey: ["prospects"] });
+      toast.success(`"${prospect.name}" deplace vers ${STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status}`);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Erreur lors du changement de statut");
     }

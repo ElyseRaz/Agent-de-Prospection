@@ -24,6 +24,7 @@ export function KanbanCard({ prospect, onOpen, onDragStart, onDragEnd, isDraggin
   const handleStatusChange = async (status: ProspectStatus) => {
     try {
       await updateProspect.mutateAsync({ status });
+      toast.success(`"${prospect.name}" deplace vers ${STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status}`);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Erreur lors du changement de statut");
     }

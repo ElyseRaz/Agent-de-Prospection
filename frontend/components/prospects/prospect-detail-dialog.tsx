@@ -144,6 +144,7 @@ export function ProspectDetailDialog({ id, onOpenChange }: ProspectDetailDialogP
     if (!contactToDelete) return;
     try {
       await deleteContact.mutateAsync(contactToDelete);
+      toast.success("Contact supprime");
       setContactToDelete(null);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Erreur lors de la suppression");

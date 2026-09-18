@@ -30,6 +30,7 @@ export default function LoginPage() {
       setTokens(tokens.access_token, tokens.refresh_token);
       const user = await fetchCurrentUser();
       setUser(user);
+      toast.success(`Bienvenue, ${user.full_name || user.email}`);
       router.replace("/dashboard");
     } catch (error) {
       const message = error instanceof ApiError ? error.message : "Erreur de connexion";
