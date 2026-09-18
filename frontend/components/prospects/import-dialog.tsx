@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { UploadCloud01, X } from "@untitledui/icons";
+import { UploadCloud01, Download01, X } from "@untitledui/icons";
 import { toast } from "sonner";
 
 import { Button } from "@/components/base/buttons/button";
@@ -9,12 +9,14 @@ import { ButtonUtility } from "@/components/base/buttons/button-utility";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "@/components/application/modals/modal";
 import { useImportProspects } from "@/hooks/use-prospects";
 import { ApiError } from "@/lib/api";
+import { downloadImportTemplate } from "@/lib/prospects-api";
 import type { ImportResponse } from "@/lib/prospects-api";
 
 export function ImportDialog() {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<ImportResponse | null>(null);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const importProspects = useImportProspects();
 
@@ -31,6 +33,17 @@ export function ImportDialog() {
     }
   };
 
+  const handleDownloadTemplate = async () => {
+    setDownloadingTemplate(true);
+    try {
+      await downloadImportTemplate();
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Erreur lors du telechargement du modele");
+    } finally {
+      setDownloadingTemplate(false);
+    }
+  };
+
   return (
     <DialogTrigger
       isOpen={open}
@@ -44,7 +57,7 @@ export function ImportDialog() {
       }}
     >
       <Button size="md" color="secondary" iconLeading={UploadCloud01}>
-        Importer un CSV
+        Importer des prospects
       </Button>
       <ModalOverlay>
         <Modal className="w-full sm:max-w-md">
@@ -59,17 +72,30 @@ export function ImportDialog() {
                   onClick={close}
                   className="absolute top-4 right-4"
                 />
-                <h2 className="text-lg font-semibold text-primary">Importer des prospects (CSV)</h2>
+                <h2 className="text-lg font-semibold text-primary">Importer des prospects (CSV ou Excel)</h2>
                 <p className="mt-1 text-sm text-tertiary">
-                  Colonnes attendues : <code>name,domain,email,source_note</code>.{" "}
-                  <code>source_note</code> devient obligatoire des qu&apos;un email est fourni sur la
-                  ligne.
+                  Seule la colonne <code>name</code> est obligatoire. Colonnes reconnues :{" "}
+                  <code>name, domain, website, address, phone, company_email, email, source_note</code>.{" "}
+                  <code>email</code> cree un contact trace ; <code>source_note</code> devient alors
+                  obligatoire.
                 </p>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  color="link-color"
+                  iconLeading={Download01}
+                  isLoading={downloadingTemplate}
+                  onClick={handleDownloadTemplate}
+                  className="mt-3"
+                >
+                  Telecharger le modele Excel
+                </Button>
 
                 <input
                   ref={inputRef}
                   type="file"
-                  accept=".csv,text/csv"
+                  accept=".csv,text/csv,.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   onChange={(e) => {
                     setFile(e.target.files?.[0] ?? null);
                     setResult(null);

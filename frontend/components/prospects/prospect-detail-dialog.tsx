@@ -86,6 +86,9 @@ export function ProspectDetailDialog({ id, onOpenChange }: ProspectDetailDialogP
         name: prospect.name,
         domain: prospect.domain ?? "",
         websiteUrl: prospect.website_url ?? "",
+        address: prospect.address ?? "",
+        phone: prospect.phone ?? "",
+        email: prospect.email ?? "",
         status: prospect.status,
         notes: prospect.notes ?? "",
       });
@@ -104,6 +107,9 @@ export function ProspectDetailDialog({ id, onOpenChange }: ProspectDetailDialogP
         name: values.name,
         domain: values.domain || null,
         website_url: values.websiteUrl || null,
+        address: values.address || null,
+        phone: values.phone || null,
+        email: values.email || null,
         status: values.status,
         notes: values.notes || null,
       });
@@ -178,6 +184,9 @@ export function ProspectDetailDialog({ id, onOpenChange }: ProspectDetailDialogP
                   <FormInput className="col-span-2" control={control} name="name" label="Nom" />
                   <FormInput control={control} name="domain" label="Domaine" />
                   <FormInput control={control} name="websiteUrl" label="Site web" />
+                  <FormInput control={control} name="phone" label="Telephone" />
+                  <FormInput control={control} name="email" label="Email de l'entreprise" type="email" />
+                  <FormInput className="col-span-2" control={control} name="address" label="Adresse" />
                   <div className="col-span-2">
                     <NativeSelect label="Statut" options={STATUS_OPTIONS} {...register("status")} />
                   </div>

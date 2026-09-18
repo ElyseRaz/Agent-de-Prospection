@@ -57,6 +57,9 @@ func (h *Handlers) CreateCompany(c echo.Context) error {
 	if strings.TrimSpace(req.Name) == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "Le nom de l'entreprise est requis")
 	}
+	if req.Email != nil && strings.TrimSpace(*req.Email) != "" && !isValidEmail(*req.Email) {
+		return echo.NewHTTPError(http.StatusBadRequest, "Email de l'entreprise invalide")
+	}
 	if req.Contact != nil {
 		if !isValidEmail(req.Contact.Email) {
 			return echo.NewHTTPError(http.StatusBadRequest, "Email de contact invalide")
@@ -75,6 +78,9 @@ func (h *Handlers) CreateCompany(c echo.Context) error {
 		Name:       req.Name,
 		Domain:     textOrNull(req.Domain),
 		WebsiteUrl: textOrNull(req.WebsiteURL),
+		Address:    textOrNull(req.Address),
+		Phone:      textOrNull(req.Phone),
+		Email:      textOrNull(req.Email),
 		Notes:      textOrNull(req.Notes),
 	})
 	if err != nil {
@@ -194,12 +200,18 @@ func (h *Handlers) UpdateCompany(c echo.Context) error {
 	if req.Status != nil && !validStatuses[*req.Status] {
 		return echo.NewHTTPError(http.StatusBadRequest, "Statut invalide")
 	}
+	if req.Email != nil && strings.TrimSpace(*req.Email) != "" && !isValidEmail(*req.Email) {
+		return echo.NewHTTPError(http.StatusBadRequest, "Email de l'entreprise invalide")
+	}
 
 	updated, err := h.Queries.UpdateCompany(c.Request().Context(), sqlc.UpdateCompanyParams{
 		ID:         auth.ToPgUUID(companyID),
 		Name:       textOrNull(req.Name),
 		Domain:     textOrNull(req.Domain),
 		WebsiteUrl: textOrNull(req.WebsiteURL),
+		Address:    textOrNull(req.Address),
+		Phone:      textOrNull(req.Phone),
+		Email:      textOrNull(req.Email),
 		Status:     statusOrNull(req.Status),
 		Notes:      textOrNull(req.Notes),
 	})

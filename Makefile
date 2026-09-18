@@ -29,7 +29,7 @@ sqlc:
 	docker run --rm -v "$(CURDIR)/backend:/src" -w /src sqlc/sqlc generate
 
 test:
-	docker run --rm -v "$(CURDIR)/backend:/src" -w /src golang:1.23-alpine go test ./...
+	docker run --rm -v "$(CURDIR)/backend:/src" -w /src golang:1.25-alpine go test ./...
 
 lint:
 	docker run --rm -v "$(CURDIR)/backend:/src" -w /src golangci/golangci-lint:latest golangci-lint run

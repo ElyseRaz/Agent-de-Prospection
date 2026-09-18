@@ -144,3 +144,38 @@ export async function apiUpload<T>(path: string, file: File, fieldName = "file")
 
   return (await response.json()) as T;
 }
+
+/** Variante pour telecharger un fichier binaire (ex: modele Excel) genere
+ * par l'API, et declencher son enregistrement cote navigateur. */
+export async function apiDownload(path: string, filename: string): Promise<void> {
+  const url = `/api/v1${path}`;
+
+  const doFetch = async (): Promise<Response> => {
+    const headers: Record<string, string> = {};
+    const token = useAuthStore.getState().accessToken;
+    if (token) headers.Authorization = `Bearer ${token}`;
+    return fetch(url, { headers });
+  };
+
+  let response = await doFetch();
+
+  if (response.status === 401) {
+    const newToken = await refreshAccessToken();
+    if (newToken) response = await doFetch();
+  }
+
+  if (!response.ok) {
+    const errorBody = await parseJsonSafe(response);
+    throw new ApiError(response.status, extractErrorMessage(errorBody, `Erreur ${response.status}`), errorBody);
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}

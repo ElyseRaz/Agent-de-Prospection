@@ -2,11 +2,14 @@ package prospects
 
 import (
 	"encoding/csv"
+	"errors"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/xuri/excelize/v2"
 
 	"leadpilot/internal/auth"
 	"leadpilot/internal/db/sqlc"
@@ -26,11 +29,13 @@ type importResponse struct {
 	Rows     []importRowResult `json:"rows"`
 }
 
-// ImportCompanies lit un CSV (colonnes attendues : name,domain,email,
-// source_note - email/source_note optionnels, mais source_note devient
-// obligatoire des qu'un email est fourni sur la ligne) et cree un prospect
-// (+ contact eventuel) par ligne valide. Une ligne en erreur n'interrompt
-// jamais l'import des suivantes - le rapport liste chaque ligne traitee.
+// ImportCompanies lit un fichier CSV ou Excel (.xlsx). Seule la colonne
+// 'name' est obligatoire ; 'domain', 'website', 'address', 'phone' et
+// 'company_email' renseignent la fiche entreprise. 'email' cree en plus un
+// contact trace sur la fiche - 'source_note' devient alors obligatoire.
+// Cree un prospect (+ contact eventuel) par ligne valide. Une ligne en
+// erreur n'interrompt jamais l'import des suivantes - le rapport liste
+// chaque ligne traitee.
 func (h *Handlers) ImportCompanies(c echo.Context) error {
 	userID, ok := auth.UserIDFromContext(c)
 	if !ok {
@@ -51,37 +56,33 @@ func (h *Handlers) ImportCompanies(c echo.Context) error {
 	}
 	defer file.Close()
 
-	reader := csv.NewReader(io.LimitReader(file, maxImportFileSize))
-	reader.TrimLeadingSpace = true
-	reader.FieldsPerRecord = -1
-
-	header, err := reader.Read()
+	records, err := readImportRows(file, fileHeader.Filename)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "CSV vide ou illisible")
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	columnIndex := indexColumns(header)
 
+	columnIndex := indexColumns(records[0])
 	nameIdx, ok := columnIndex["name"]
 	if !ok {
-		return echo.NewHTTPError(http.StatusBadRequest, "Colonne 'name' obligatoire dans le CSV")
+		return echo.NewHTTPError(http.StatusBadRequest, "Colonne 'name' obligatoire")
 	}
 	domainIdx, hasDomain := columnIndex["domain"]
 	emailIdx, hasEmail := columnIndex["email"]
 	sourceNoteIdx, hasSourceNote := columnIndex["source_note"]
+	addressIdx, hasAddress := columnIndex["address"]
+	phoneIdx, hasPhone := columnIndex["phone"]
+	companyEmailIdx, hasCompanyEmail := columnIndex["company_email"]
+	websiteIdx, hasWebsite := columnIndex["website"]
 
 	ctx := c.Request().Context()
 	result := importResponse{Rows: []importRowResult{}}
-	rowNumber := 1
 
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		rowNumber++
-		if err != nil {
+	for i, record := range records[1:] {
+		rowNumber := i + 2 // la ligne 1 est l'en-tete
+
+		if record == nil {
 			result.Skipped++
-			result.Rows = append(result.Rows, importRowResult{Row: rowNumber, Status: "error", Message: "ligne CSV illisible"})
+			result.Rows = append(result.Rows, importRowResult{Row: rowNumber, Status: "error", Message: "ligne illisible"})
 			continue
 		}
 
@@ -122,12 +123,44 @@ func (h *Handlers) ImportCompanies(c echo.Context) error {
 				domainPtr = &domain
 			}
 		}
+		var websitePtr *string
+		if hasWebsite {
+			if website := cellAt(record, websiteIdx); website != "" {
+				websitePtr = &website
+			}
+		}
+		var addressPtr *string
+		if hasAddress {
+			if address := cellAt(record, addressIdx); address != "" {
+				addressPtr = &address
+			}
+		}
+		var phonePtr *string
+		if hasPhone {
+			if phone := cellAt(record, phoneIdx); phone != "" {
+				phonePtr = &phone
+			}
+		}
+		var companyEmailPtr *string
+		if hasCompanyEmail {
+			if companyEmail := cellAt(record, companyEmailIdx); companyEmail != "" {
+				if !isValidEmail(companyEmail) {
+					result.Skipped++
+					result.Rows = append(result.Rows, importRowResult{Row: rowNumber, Status: "error", Message: "company_email invalide"})
+					continue
+				}
+				companyEmailPtr = &companyEmail
+			}
+		}
 
 		company, err := h.Queries.CreateCompany(ctx, sqlc.CreateCompanyParams{
 			UserID:     auth.ToPgUUID(userID),
 			Name:       name,
 			Domain:     textOrNull(domainPtr),
-			WebsiteUrl: textOrNull(nil),
+			WebsiteUrl: textOrNull(websitePtr),
+			Address:    textOrNull(addressPtr),
+			Phone:      textOrNull(phonePtr),
+			Email:      textOrNull(companyEmailPtr),
 			Notes:      textOrNull(nil),
 		})
 		if err != nil {
@@ -156,6 +189,68 @@ func (h *Handlers) ImportCompanies(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, result)
+}
+
+// readImportRows lit un fichier CSV ou Excel (.xlsx/.xlsm) et retourne
+// toutes les lignes (en-tete inclus) sous forme de cellules texte, quelle
+// que soit la source.
+func readImportRows(file io.Reader, filename string) ([][]string, error) {
+	ext := strings.ToLower(filepath.Ext(filename))
+
+	var records [][]string
+	var err error
+	if ext == ".xlsx" || ext == ".xlsm" {
+		records, err = readExcelRows(file)
+	} else {
+		records, err = readCSVRows(file)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(records) == 0 {
+		return nil, errors.New("fichier vide ou illisible")
+	}
+	return records, nil
+}
+
+func readCSVRows(file io.Reader) ([][]string, error) {
+	reader := csv.NewReader(io.LimitReader(file, maxImportFileSize))
+	reader.TrimLeadingSpace = true
+	reader.FieldsPerRecord = -1
+
+	var records [][]string
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			// Une ligne CSV mal formee ne doit pas interrompre l'import :
+			// on la garde comme placeholder, elle sera signalee en erreur.
+			records = append(records, nil)
+			continue
+		}
+		records = append(records, record)
+	}
+	return records, nil
+}
+
+func readExcelRows(file io.Reader) ([][]string, error) {
+	f, err := excelize.OpenReader(file)
+	if err != nil {
+		return nil, errors.New("fichier Excel illisible")
+	}
+	defer f.Close()
+
+	sheets := f.GetSheetList()
+	if len(sheets) == 0 {
+		return nil, errors.New("fichier Excel sans feuille")
+	}
+	rows, err := f.GetRows(sheets[0])
+	if err != nil {
+		return nil, errors.New("impossible de lire la feuille Excel")
+	}
+	return rows, nil
 }
 
 func indexColumns(header []string) map[string]int {

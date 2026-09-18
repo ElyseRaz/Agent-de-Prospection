@@ -21,6 +21,9 @@ type companyResponse struct {
 	Name                  string   `json:"name"`
 	Domain                *string  `json:"domain"`
 	WebsiteURL            *string  `json:"website_url"`
+	Address               *string  `json:"address"`
+	Phone                 *string  `json:"phone"`
+	Email                 *string  `json:"email"`
 	Status                string   `json:"status"`
 	Notes                 *string  `json:"notes"`
 	CreatedAt             string   `json:"created_at"`
@@ -47,6 +50,9 @@ func toCompanyResponse(c sqlc.Company) companyResponse {
 		Name:                  c.Name,
 		Domain:                textPtr(c.Domain),
 		WebsiteURL:            textPtr(c.WebsiteUrl),
+		Address:               textPtr(c.Address),
+		Phone:                 textPtr(c.Phone),
+		Email:                 textPtr(c.Email),
 		Status:                string(c.Status),
 		Notes:                 textPtr(c.Notes),
 		CreatedAt:             c.CreatedAt.Time.Format(time.RFC3339),
@@ -93,6 +99,9 @@ type createCompanyRequest struct {
 	Name       string        `json:"name"`
 	Domain     *string       `json:"domain"`
 	WebsiteURL *string       `json:"website_url"`
+	Address    *string       `json:"address"`
+	Phone      *string       `json:"phone"`
+	Email      *string       `json:"email"`
 	Notes      *string       `json:"notes"`
 	Contact    *contactInput `json:"contact"`
 }
@@ -101,6 +110,9 @@ type updateCompanyRequest struct {
 	Name       *string `json:"name"`
 	Domain     *string `json:"domain"`
 	WebsiteURL *string `json:"website_url"`
+	Address    *string `json:"address"`
+	Phone      *string `json:"phone"`
+	Email      *string `json:"email"`
 	Status     *string `json:"status"`
 	Notes      *string `json:"notes"`
 }

@@ -57,6 +57,7 @@ func New(cfg config.Config, pool *pgxpool.Pool, asynqClient *asynq.Client) *echo
 	prospectGroup.POST("", prospectHandlers.CreateCompany)
 	prospectGroup.GET("", prospectHandlers.ListCompanies)
 	prospectGroup.POST("/import", prospectHandlers.ImportCompanies)
+	prospectGroup.GET("/import/template", prospectHandlers.DownloadImportTemplate)
 	prospectGroup.GET("/:id", prospectHandlers.GetCompany)
 	prospectGroup.PATCH("/:id", prospectHandlers.UpdateCompany)
 	prospectGroup.DELETE("/:id", prospectHandlers.DeleteCompany)

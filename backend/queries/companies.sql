@@ -1,6 +1,6 @@
 -- name: CreateCompany :one
-INSERT INTO companies (user_id, name, domain, website_url, notes)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO companies (user_id, name, domain, website_url, address, phone, email, notes)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetCompanyByID :one
@@ -23,6 +23,9 @@ SET
     name = coalesce(sqlc.narg(name), name),
     domain = coalesce(sqlc.narg(domain), domain),
     website_url = coalesce(sqlc.narg(website_url), website_url),
+    address = coalesce(sqlc.narg(address), address),
+    phone = coalesce(sqlc.narg(phone), phone),
+    email = coalesce(sqlc.narg(email), email),
     status = coalesce(sqlc.narg(status), status),
     notes = coalesce(sqlc.narg(notes), notes),
     updated_at = now()

@@ -29,6 +29,9 @@ export function AddProspectDialog() {
         name: values.name,
         domain: values.domain || null,
         website_url: values.websiteUrl || null,
+        address: values.address || null,
+        phone: values.phone || null,
+        email: values.email || null,
         notes: values.notes || null,
         contact: values.contactEmail
           ? {
@@ -91,6 +94,21 @@ export function AddProspectDialog() {
                   label="Site web"
                   placeholder="https://acme.com"
                 />
+                <FormInput control={control} name="phone" label="Telephone" placeholder="+33 1 23 45 67 89" />
+                <FormInput
+                  control={control}
+                  name="email"
+                  label="Email de l'entreprise"
+                  type="email"
+                  placeholder="contact@acme.com"
+                />
+                <FormInput
+                  className="col-span-2"
+                  control={control}
+                  name="address"
+                  label="Adresse"
+                  placeholder="12 rue de la Paix, 75002 Paris"
+                />
               </div>
 
               <FormTextArea control={control} name="notes" label="Notes" rows={2} />
@@ -103,7 +121,7 @@ export function AddProspectDialog() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <FormInput control={control} name="contactEmail" label="Email" type="email" />
+                <FormInput control={control} name="contactEmail" label="Email du contact" type="email" />
                 <FormInput control={control} name="contactFullName" label="Nom du contact" />
                 <FormTextArea
                   className="col-span-2"

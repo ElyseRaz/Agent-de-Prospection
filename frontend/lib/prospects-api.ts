@@ -1,4 +1,4 @@
-import { apiFetch, apiUpload } from "@/lib/api";
+import { apiFetch, apiUpload, apiDownload } from "@/lib/api";
 
 export type ProspectStatus = "new" | "contacted" | "replied" | "converted" | "lost";
 
@@ -15,6 +15,9 @@ export interface Company {
   name: string;
   domain: string | null;
   website_url: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
   status: ProspectStatus;
   notes: string | null;
   created_at: string;
@@ -40,6 +43,9 @@ export interface CreateProspectPayload {
   name: string;
   domain?: string | null;
   website_url?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
   notes?: string | null;
   contact?: {
     email: string;
@@ -52,6 +58,9 @@ export interface UpdateProspectPayload {
   name?: string;
   domain?: string | null;
   website_url?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
   status?: ProspectStatus;
   notes?: string | null;
 }
@@ -106,6 +115,10 @@ export function deleteContact(companyId: string, contactId: string): Promise<voi
 
 export function importProspects(file: File): Promise<ImportResponse> {
   return apiUpload<ImportResponse>("/prospects/import", file);
+}
+
+export function downloadImportTemplate(): Promise<void> {
+  return apiDownload("/prospects/import/template", "modele-import-prospects.xlsx");
 }
 
 export function enrichProspect(id: string): Promise<{ status: string }> {

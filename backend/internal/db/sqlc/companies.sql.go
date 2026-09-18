@@ -23,9 +23,9 @@ func (q *Queries) CountCompaniesByUser(ctx context.Context, userID pgtype.UUID) 
 }
 
 const createCompany = `-- name: CreateCompany :one
-INSERT INTO companies (user_id, name, domain, website_url, notes)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, name, domain, website_url, status, notes, created_at, updated_at, trustpilot_rating, trustpilot_review_count, trustpilot_fetched_at, ai_needs, ai_summary, ai_analyzed_at
+INSERT INTO companies (user_id, name, domain, website_url, address, phone, email, notes)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, user_id, name, domain, website_url, status, notes, created_at, updated_at, trustpilot_rating, trustpilot_review_count, trustpilot_fetched_at, ai_needs, ai_summary, ai_analyzed_at, address, phone, email
 `
 
 type CreateCompanyParams struct {
@@ -33,6 +33,9 @@ type CreateCompanyParams struct {
 	Name       string      `json:"name"`
 	Domain     pgtype.Text `json:"domain"`
 	WebsiteUrl pgtype.Text `json:"website_url"`
+	Address    pgtype.Text `json:"address"`
+	Phone      pgtype.Text `json:"phone"`
+	Email      pgtype.Text `json:"email"`
 	Notes      pgtype.Text `json:"notes"`
 }
 
@@ -42,6 +45,9 @@ func (q *Queries) CreateCompany(ctx context.Context, arg CreateCompanyParams) (C
 		arg.Name,
 		arg.Domain,
 		arg.WebsiteUrl,
+		arg.Address,
+		arg.Phone,
+		arg.Email,
 		arg.Notes,
 	)
 	var i Company
@@ -61,6 +67,9 @@ func (q *Queries) CreateCompany(ctx context.Context, arg CreateCompanyParams) (C
 		&i.AiNeeds,
 		&i.AiSummary,
 		&i.AiAnalyzedAt,
+		&i.Address,
+		&i.Phone,
+		&i.Email,
 	)
 	return i, err
 }
@@ -75,7 +84,7 @@ func (q *Queries) DeleteCompany(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getCompanyByID = `-- name: GetCompanyByID :one
-SELECT id, user_id, name, domain, website_url, status, notes, created_at, updated_at, trustpilot_rating, trustpilot_review_count, trustpilot_fetched_at, ai_needs, ai_summary, ai_analyzed_at FROM companies WHERE id = $1
+SELECT id, user_id, name, domain, website_url, status, notes, created_at, updated_at, trustpilot_rating, trustpilot_review_count, trustpilot_fetched_at, ai_needs, ai_summary, ai_analyzed_at, address, phone, email FROM companies WHERE id = $1
 `
 
 func (q *Queries) GetCompanyByID(ctx context.Context, id pgtype.UUID) (Company, error) {
@@ -97,12 +106,15 @@ func (q *Queries) GetCompanyByID(ctx context.Context, id pgtype.UUID) (Company, 
 		&i.AiNeeds,
 		&i.AiSummary,
 		&i.AiAnalyzedAt,
+		&i.Address,
+		&i.Phone,
+		&i.Email,
 	)
 	return i, err
 }
 
 const listCompaniesByUser = `-- name: ListCompaniesByUser :many
-SELECT id, user_id, name, domain, website_url, status, notes, created_at, updated_at, trustpilot_rating, trustpilot_review_count, trustpilot_fetched_at, ai_needs, ai_summary, ai_analyzed_at FROM companies
+SELECT id, user_id, name, domain, website_url, status, notes, created_at, updated_at, trustpilot_rating, trustpilot_review_count, trustpilot_fetched_at, ai_needs, ai_summary, ai_analyzed_at, address, phone, email FROM companies
 WHERE user_id = $1
   AND ($2::company_status IS NULL OR status = $2)
   AND (
@@ -144,6 +156,9 @@ func (q *Queries) ListCompaniesByUser(ctx context.Context, arg ListCompaniesByUs
 			&i.AiNeeds,
 			&i.AiSummary,
 			&i.AiAnalyzedAt,
+			&i.Address,
+			&i.Phone,
+			&i.Email,
 		); err != nil {
 			return nil, err
 		}
@@ -161,17 +176,23 @@ SET
     name = coalesce($1, name),
     domain = coalesce($2, domain),
     website_url = coalesce($3, website_url),
-    status = coalesce($4, status),
-    notes = coalesce($5, notes),
+    address = coalesce($4, address),
+    phone = coalesce($5, phone),
+    email = coalesce($6, email),
+    status = coalesce($7, status),
+    notes = coalesce($8, notes),
     updated_at = now()
-WHERE id = $6
-RETURNING id, user_id, name, domain, website_url, status, notes, created_at, updated_at, trustpilot_rating, trustpilot_review_count, trustpilot_fetched_at, ai_needs, ai_summary, ai_analyzed_at
+WHERE id = $9
+RETURNING id, user_id, name, domain, website_url, status, notes, created_at, updated_at, trustpilot_rating, trustpilot_review_count, trustpilot_fetched_at, ai_needs, ai_summary, ai_analyzed_at, address, phone, email
 `
 
 type UpdateCompanyParams struct {
 	Name       pgtype.Text       `json:"name"`
 	Domain     pgtype.Text       `json:"domain"`
 	WebsiteUrl pgtype.Text       `json:"website_url"`
+	Address    pgtype.Text       `json:"address"`
+	Phone      pgtype.Text       `json:"phone"`
+	Email      pgtype.Text       `json:"email"`
 	Status     NullCompanyStatus `json:"status"`
 	Notes      pgtype.Text       `json:"notes"`
 	ID         pgtype.UUID       `json:"id"`
@@ -182,6 +203,9 @@ func (q *Queries) UpdateCompany(ctx context.Context, arg UpdateCompanyParams) (C
 		arg.Name,
 		arg.Domain,
 		arg.WebsiteUrl,
+		arg.Address,
+		arg.Phone,
+		arg.Email,
 		arg.Status,
 		arg.Notes,
 		arg.ID,
@@ -203,6 +227,9 @@ func (q *Queries) UpdateCompany(ctx context.Context, arg UpdateCompanyParams) (C
 		&i.AiNeeds,
 		&i.AiSummary,
 		&i.AiAnalyzedAt,
+		&i.Address,
+		&i.Phone,
+		&i.Email,
 	)
 	return i, err
 }
@@ -218,7 +245,7 @@ SET
     ai_analyzed_at = $6,
     updated_at = now()
 WHERE id = $7
-RETURNING id, user_id, name, domain, website_url, status, notes, created_at, updated_at, trustpilot_rating, trustpilot_review_count, trustpilot_fetched_at, ai_needs, ai_summary, ai_analyzed_at
+RETURNING id, user_id, name, domain, website_url, status, notes, created_at, updated_at, trustpilot_rating, trustpilot_review_count, trustpilot_fetched_at, ai_needs, ai_summary, ai_analyzed_at, address, phone, email
 `
 
 type UpdateEnrichmentParams struct {
@@ -258,6 +285,9 @@ func (q *Queries) UpdateEnrichment(ctx context.Context, arg UpdateEnrichmentPara
 		&i.AiNeeds,
 		&i.AiSummary,
 		&i.AiAnalyzedAt,
+		&i.Address,
+		&i.Phone,
+		&i.Email,
 	)
 	return i, err
 }

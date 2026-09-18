@@ -33,11 +33,20 @@ const optionalUrl = z
   .or(z.literal(""))
   .refine((v) => !v || /^https?:\/\//.test(v), "URL invalide (doit commencer par http:// ou https://)");
 
+const optionalEmail = z
+  .string()
+  .optional()
+  .or(z.literal(""))
+  .refine((v) => !v || z.string().email().safeParse(v).success, "Email invalide");
+
 export const createProspectSchema = z
   .object({
     name: z.string().min(1, "Nom requis"),
     domain: z.string().optional().or(z.literal("")),
     websiteUrl: optionalUrl,
+    address: z.string().optional().or(z.literal("")),
+    phone: z.string().optional().or(z.literal("")),
+    email: optionalEmail,
     notes: z.string().optional().or(z.literal("")),
     contactEmail: z.string(),
     contactFullName: z.string().optional().or(z.literal("")),
@@ -58,6 +67,9 @@ export const editProspectSchema = z.object({
   name: z.string().min(1, "Nom requis"),
   domain: z.string().optional().or(z.literal("")),
   websiteUrl: optionalUrl,
+  address: z.string().optional().or(z.literal("")),
+  phone: z.string().optional().or(z.literal("")),
+  email: optionalEmail,
   status: z.enum(["new", "contacted", "replied", "converted", "lost"]),
   notes: z.string().optional().or(z.literal("")),
 });

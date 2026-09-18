@@ -224,6 +224,9 @@ type Company struct {
 	AiNeeds               []byte             `json:"ai_needs"`
 	AiSummary             pgtype.Text        `json:"ai_summary"`
 	AiAnalyzedAt          pgtype.Timestamptz `json:"ai_analyzed_at"`
+	Address               pgtype.Text        `json:"address"`
+	Phone                 pgtype.Text        `json:"phone"`
+	Email                 pgtype.Text        `json:"email"`
 }
 
 type Contact struct {

@@ -92,7 +92,14 @@ export default function ProspectsPage() {
                       className="h-16 cursor-pointer border-t border-secondary hover:bg-secondary"
                       onClick={() => setSelectedId(prospect.id)}
                     >
-                      <td className="px-6 py-3 text-sm font-medium text-primary">{prospect.name}</td>
+                      <td className="px-6 py-3 text-sm font-medium text-primary">
+                        {prospect.name}
+                        {(prospect.phone || prospect.email) && (
+                          <p className="mt-0.5 text-xs font-normal text-tertiary">
+                            {[prospect.phone, prospect.email].filter(Boolean).join(" · ")}
+                          </p>
+                        )}
+                      </td>
                       <td className="px-6 py-3 text-sm text-tertiary">{prospect.domain ?? "—"}</td>
                       <td className="px-6 py-3">
                         <StatusBadge status={prospect.status} />
