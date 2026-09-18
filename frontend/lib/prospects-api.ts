@@ -129,6 +129,8 @@ export interface SettingsStatus {
   trustpilot_configured: boolean;
   groq_configured: boolean;
   smtp_configured: boolean;
+  smtp_from: string;
+  smtp_from_risky: boolean;
   daily_send_limit: number;
 }
 

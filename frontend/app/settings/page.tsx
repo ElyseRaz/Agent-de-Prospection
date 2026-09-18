@@ -2,7 +2,7 @@
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CheckCircle, XCircle } from "@untitledui/icons";
+import { CheckCircle, XCircle, AlertTriangle } from "@untitledui/icons";
 import { toast } from "sonner";
 
 import { AuthGuard } from "@/components/auth/auth-guard";
@@ -162,6 +162,24 @@ export default function SettingsPage() {
                     configured={status?.smtp_configured ?? false}
                     envVar="SMTP_HOST"
                   />
+                  {status?.smtp_configured && status.smtp_from_risky && (
+                    <div className="flex items-start gap-3 rounded-md bg-utility-yellow-50 p-3 ring-1 ring-utility-yellow-200">
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-utility-yellow-500" />
+                      <div>
+                        <p className="text-sm font-medium text-utility-yellow-700">
+                          Adresse d&apos;expedition a risque : <code>{status.smtp_from}</code>
+                        </p>
+                        <p className="mt-1 text-xs text-utility-yellow-700">
+                          C&apos;est un domaine de messagerie grand public (Gmail, Outlook, Yahoo...).
+                          Envoyer en son nom via un relais SMTP tiers echoue generalement
+                          l&apos;alignement DMARC du fournisseur reel — les emails finissent en spam
+                          ou sont rejetes silencieusement. Utilise plutot une adresse sur un domaine
+                          que tu controles, verifie cote SMTP (SPF/DKIM), via <code>SMTP_FROM</code>{" "}
+                          dans <code>.env</code>.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between rounded-md bg-secondary p-3">
                     <div>
                       <p className="text-sm font-medium text-secondary">Limite d&apos;envoi quotidienne</p>
